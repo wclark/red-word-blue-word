@@ -203,7 +203,7 @@
           <p class="step-kicker"><span>02</span> Clean the model</p>
           <div>
             <h2 id="deck-title">Explore the garden-path cards</h2>
-            <p>Each card has one red word, zero or more automatic black words, and one final blue word naming the next red-word juncture.</p>
+          <p>Each card has one red word, zero or more automatic black words, and one final blue word naming the next red-word juncture, X boundary, or pruning dead end.</p>
           </div>
         </div>
 
@@ -295,6 +295,63 @@
             </label>
           </div>
         </div>
+        <details class="deck-filters" id="deck-filters">
+          <summary>
+            <span>Filter garden-path cards</span>
+            <small id="card-filter-status">All cards · 1 red + any number of black + 1 blue</small>
+          </summary>
+          <div class="deck-filter-grid">
+            <label for="starting-word-filter">Starting red word
+              <select id="starting-word-filter">
+                <option value="any" selected>Any</option>
+                <option value="yes">Can start a sentence</option>
+                <option value="no">Never starts a sentence</option>
+              </select>
+            </label>
+            <label for="final-blue-filter">Final blue word
+              <select id="final-blue-filter">
+                <option value="any" selected>Any</option>
+                <option value="next">Next red card</option>
+                <option value="boundary">X · ends sentence</option>
+                <option value="dead-end">Dead end after pruning</option>
+              </select>
+            </label>
+            <fieldset class="filter-range">
+              <legend>Black words</legend>
+              <div>
+                <label for="black-words-min">Min<input id="black-words-min" type="number" min="0" step="1" inputmode="numeric" placeholder="any" aria-label="Minimum black words"></label>
+                <span aria-hidden="true">to</span>
+                <label for="black-words-max">Max<input id="black-words-max" type="number" min="0" step="1" inputmode="numeric" placeholder="any" aria-label="Maximum black words"></label>
+              </div>
+            </fieldset>
+            <fieldset class="filter-range">
+              <legend>Total words</legend>
+              <div>
+                <label for="total-words-min">Min<input id="total-words-min" type="number" min="2" step="1" inputmode="numeric" placeholder="any" aria-label="Minimum total words"></label>
+                <span aria-hidden="true">to</span>
+                <label for="total-words-max">Max<input id="total-words-max" type="number" min="2" step="1" inputmode="numeric" placeholder="any" aria-label="Maximum total words"></label>
+              </div>
+            </fieldset>
+            <fieldset class="filter-range">
+              <legend>Choices at red</legend>
+              <div>
+                <label for="choices-min">Min<input id="choices-min" type="number" min="1" step="1" inputmode="numeric" placeholder="any" aria-label="Minimum choices at red"></label>
+                <span aria-hidden="true">to</span>
+                <label for="choices-max">Max<input id="choices-max" type="number" min="1" step="1" inputmode="numeric" placeholder="any" aria-label="Maximum choices at red"></label>
+              </div>
+            </fieldset>
+            <fieldset class="filter-range">
+              <legend>Occurrences</legend>
+              <div>
+                <label for="frequency-min">Min<input id="frequency-min" type="number" min="1" step="1" inputmode="numeric" placeholder="any" aria-label="Minimum occurrences"></label>
+                <span aria-hidden="true">to</span>
+                <label for="frequency-max">Max<input id="frequency-max" type="number" min="1" step="1" inputmode="numeric" placeholder="any" aria-label="Maximum occurrences"></label>
+              </div>
+            </fieldset>
+            <button class="button button-small filter-clear" type="button" id="clear-card-filters" disabled>Clear filters</button>
+          </div>
+          <p class="filter-footnote">Every garden-path card has exactly one red word and one blue word. Black words vary; total words are red + black + blue.</p>
+        </details>
         <div class="card-piles" id="card-piles"></div>
         <div class="deck-footer">
           <p class="deck-summary" id="deck-summary" aria-live="polite"></p>

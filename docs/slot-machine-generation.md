@@ -14,18 +14,27 @@ The raw bigram traversal keeps probability and replacement behavior unchanged.
 The grouped cards prevent the interface from pretending there is another choice
 at every deterministic intermediate word.
 
+The result also records `startWord`, `startOptions`, and the raw X entry card.
+X chooses the sentence start with its original weights, but it is not rendered
+as a garden-path card. The selected starting word becomes the first red word.
+If the word limit stops inside a deterministic run, `partialGardenPath` keeps
+those visible words separate instead of mislabeling the cutoff as a blue
+juncture.
+
 ## Proposed interaction
 
 1. Add an **Instant / Slot machine** mode control to the Generate screen.
 2. Generate the complete result first so probability and replacement behavior
    remain identical in both modes.
-3. At each red-word juncture, cycle visually through the candidate garden-path
+3. Cycle through `startOptions`, lock the starting word, and present it as the
+   first red word rather than displaying an X-to-word card.
+4. At each red-word juncture, cycle visually through the candidate garden-path
    cards for roughly 400–650 ms.
-4. Lock on the selected first step, reveal its zero or more black words without
+5. Lock on the selected first step, reveal its zero or more black words without
    shuffling, then reveal the final blue word.
-5. Turn that final blue word into the next red word and repeat. Do not animate
+6. Turn that final blue word into the next red word and repeat. Do not animate
    each hidden bigram along the black garden path.
-6. Stop at X, a dead end, or the word limit.
+7. Stop at X, a dead end, or the word limit.
 
 The animation should expose the choice set without implying that the final
 visual frame caused the selection. Repeated cards can influence how often a

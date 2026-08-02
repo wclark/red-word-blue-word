@@ -283,6 +283,10 @@ export function generateSentence(model, options = {}) {
       cards: [],
       steps: [],
       gardenPathCards: [],
+      partialGardenPath: null,
+      startWord: "",
+      startOptions: [],
+      entryCard: null,
       completed: false,
       reason: "empty",
     };
@@ -334,12 +338,18 @@ export function generateSentence(model, options = {}) {
     red = card.blue;
   }
 
+  const generatedPath = buildGeneratedGardenPath(model, usedCards, steps);
+
   return {
     text: formatSentence(words, completed),
     words,
     cards: usedCards,
     steps,
-    gardenPathCards: buildGeneratedGardenPathCards(model, usedCards, steps),
+    gardenPathCards: generatedPath.cards,
+    partialGardenPath: generatedPath.partial,
+    startWord: usedCards[0]?.blue === BOUNDARY ? "" : usedCards[0]?.blue ?? "",
+    startOptions: steps[0]?.options ?? [],
+    entryCard: usedCards[0] ?? null,
     completed,
     reason,
   };
@@ -380,6 +390,11 @@ function gardenPathJunctures(model) {
       [...new Set(cards.map(({ blue }) => blue))],
     ])
   );
+  const sentenceStartWords = new Set(
+    (model.transitions.get(BOUNDARY) ?? [])
+      .map(({ blue }) => blue)
+      .filter((word) => word !== BOUNDARY)
+  );
   const anchors = new Set([BOUNDARY]);
 
   choiceWords.forEach((choices, red) => {
@@ -408,16 +423,22 @@ function gardenPathJunctures(model) {
     }
   });
 
-  return { anchors, choiceWords };
+  return {
+    anchors,
+    origins: new Set([...anchors, ...sentenceStartWords]),
+    choiceWords,
+    sentenceStartWords,
+  };
 }
 
 export function gardenPathCards(model, options = {}) {
   const sortBy = typeof options === "string" ? options : options.sortBy ?? "alphabetical";
   if (!model?.transitions?.size) return [];
-  const { anchors, choiceWords } = gardenPathJunctures(model);
+  const { anchors, origins, choiceWords, sentenceStartWords } = gardenPathJunctures(model);
   const rows = [];
 
-  anchors.forEach((red) => {
+  origins.forEach((red) => {
+    if (red === BOUNDARY) return;
     const sourceCards = model.transitions.get(red) ?? [];
     if (!sourceCards.length) return;
     const choices = blueWordCounts(sourceCards);
@@ -440,6 +461,7 @@ export function gardenPathCards(model, options = {}) {
 
       const finalBlue = pathWords.at(-1);
       const blackWords = pathWords.slice(0, -1);
+      const isDeadEnd = finalBlue !== BOUNDARY && !(model.transitions.get(finalBlue)?.length);
 
       rows.push({
         red,
@@ -450,6 +472,13 @@ export function gardenPathCards(model, options = {}) {
         total: sourceCards.length,
         choiceCount: choices.length,
         bigramCount: pathWords.length,
+        redWordCount: 1,
+        blackWordCount: blackWords.length,
+        blueWordCount: 1,
+        totalWordCount: blackWords.length + 2,
+        isStartingWord: sentenceStartWords.has(red),
+        endsSentence: finalBlue === BOUNDARY,
+        isDeadEnd,
         sourceSequence: [red, ...pathWords].filter((word) => word !== BOUNDARY),
       });
     });
@@ -458,23 +487,69 @@ export function gardenPathCards(model, options = {}) {
   return rows.sort((a, b) => compareCardRows(a, b, sortBy));
 }
 
+function matchesBooleanFilter(value, filter) {
+  if (filter === "yes") return value;
+  if (filter === "no") return !value;
+  return true;
+}
+
+function matchesNumberRange(value, minimum, maximum) {
+  const min = minimum === "" || minimum === null || minimum === undefined
+    ? null
+    : Number(minimum);
+  const max = maximum === "" || maximum === null || maximum === undefined
+    ? null
+    : Number(maximum);
+  if (Number.isFinite(min) && value < min) return false;
+  if (Number.isFinite(max) && value > max) return false;
+  return true;
+}
+
+function matchesFinalBlueFilter(card, filter) {
+  if (filter === "next") return !card.endsSentence && !card.isDeadEnd;
+  if (filter === "boundary") return card.endsSentence;
+  if (filter === "dead-end") return card.isDeadEnd;
+  return true;
+}
+
+export function filterGardenPathCards(cards, filters = {}) {
+  return cards.filter((card) =>
+    matchesBooleanFilter(card.isStartingWord, filters.startingWord) &&
+    matchesBooleanFilter(card.endsSentence, filters.endsSentence) &&
+    matchesFinalBlueFilter(card, filters.finalBlue) &&
+    matchesNumberRange(card.blackWordCount, filters.blackWordsMin, filters.blackWordsMax) &&
+    matchesNumberRange(card.totalWordCount, filters.totalWordsMin, filters.totalWordsMax) &&
+    matchesNumberRange(card.choiceCount, filters.choicesMin, filters.choicesMax) &&
+    matchesNumberRange(card.count, filters.frequencyMin, filters.frequencyMax)
+  );
+}
+
 function gardenPathKey(red, firstWord) {
   return JSON.stringify([red, firstWord]);
 }
 
-function buildGeneratedGardenPathCards(model, usedCards, steps) {
-  if (!usedCards.length) return [];
+function buildGeneratedGardenPath(model, usedCards, steps) {
+  if (usedCards.length < 2) {
+    const startWord = usedCards[0]?.blue;
+    return {
+      cards: [],
+      partial: startWord && startWord !== BOUNDARY
+        ? { red: startWord, words: [], underlyingCards: [] }
+        : null,
+    };
+  }
   const { anchors } = gardenPathJunctures(model);
   const templates = new Map(
     gardenPathCards(model).map((card) => [gardenPathKey(card.red, card.firstWord), card])
   );
   const generated = [];
-  let segmentStart = 0;
+  let segmentStart = 1;
 
   usedCards.forEach((card, cardIndex) => {
-    const lastCard = cardIndex === usedCards.length - 1;
-    const reachedJuncture = card.blue === BOUNDARY || anchors.has(card.blue);
-    if (!lastCard && !reachedJuncture) return;
+    if (cardIndex === 0) return;
+    const isDeadEnd = card.blue !== BOUNDARY && !(model.transitions.get(card.blue)?.length);
+    const reachedJuncture = card.blue === BOUNDARY || anchors.has(card.blue) || isDeadEnd;
+    if (!reachedJuncture) return;
 
     const underlyingCards = usedCards.slice(segmentStart, cardIndex + 1);
     const pathWords = underlyingCards.map(({ blue }) => blue);
@@ -495,11 +570,23 @@ function buildGeneratedGardenPathCards(model, usedCards, steps) {
       choiceCount: options.length,
       underlyingCards,
       reachedJuncture,
+      endsSentence: card.blue === BOUNDARY,
+      isDeadEnd,
     });
     segmentStart = cardIndex + 1;
   });
 
-  return generated;
+  const partialCards = usedCards.slice(segmentStart);
+  return {
+    cards: generated,
+    partial: partialCards.length
+      ? {
+          red: partialCards[0].red,
+          words: partialCards.map(({ blue }) => blue),
+          underlyingCards: partialCards,
+        }
+      : null,
+  };
 }
 
 export function groupCards(model, options = {}) {
