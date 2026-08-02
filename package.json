@@ -1,0 +1,14 @@
+{
+  "name": "red-word-blue-word",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A browser-based bigram language-model lab for classrooms.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
+

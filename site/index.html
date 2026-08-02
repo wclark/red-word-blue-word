@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- DEPLOY_BASE -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Build a tiny, transparent bigram language model from text and generate surprising sentences."
+    >
+    <meta name="theme-color" content="#f7f1e5">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https:; object-src 'none'; base-uri 'self'; form-action 'self'"
+    >
+    <title>Red Word, Blue Word</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#studio">Skip to the language lab</a>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Red Word, Blue Word home">
+        <span class="brand-cards" aria-hidden="true">
+          <span>red</span><span>blue</span>
+        </span>
+        <span>RWBW Lab</span>
+      </a>
+      <a class="text-link" href="#how-it-works">How it works <span aria-hidden="true">↓</span></a>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow">A tiny language model you can hold in your head</p>
+          <h1 id="page-title">
+            <span class="red-ink">Red Word,</span>
+            <span class="blue-ink">Blue Word.</span>
+          </h1>
+          <p class="hero-lede">
+            Feed it a story. See every word-pair card. Then follow the chain to
+            make a sentence no one wrote before.
+          </p>
+          <a class="button button-dark" href="#studio">Build a word deck <span aria-hidden="true">→</span></a>
+        </div>
+
+        <div class="hero-demo" aria-label="An example chain of word-pair cards">
+          <p class="demo-label">One card leads to the next</p>
+          <div class="demo-card demo-card-one">
+            <span class="word-label">red word</span>
+            <strong class="red-ink">the</strong>
+            <span class="card-arrow" aria-hidden="true">→</span>
+            <span class="word-label">blue word</span>
+            <strong class="blue-ink">moon</strong>
+          </div>
+          <div class="demo-card demo-card-two">
+            <span class="word-label">red word</span>
+            <strong class="red-ink">moon</strong>
+            <span class="card-arrow" aria-hidden="true">→</span>
+            <span class="word-label">blue word</span>
+            <strong class="blue-ink">glows</strong>
+          </div>
+          <p class="scribble" aria-hidden="true">match the blue<br>to the next red!</p>
+        </div>
+      </section>
+
+      <section class="studio section-shell" id="studio" aria-labelledby="studio-title">
+        <div class="section-heading">
+          <p class="step-kicker"><span>01</span> Train the model</p>
+          <div>
+            <h2 id="studio-title">Choose your source text</h2>
+            <p>Nothing is uploaded by this app. Your browser builds the deck right here.</p>
+          </div>
+        </div>
+
+        <div class="source-panel">
+          <div class="tabs" role="tablist" aria-label="Text source">
+            <button class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="url-panel" id="url-tab" data-tab="url-panel">From a URL</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="paste-panel" id="paste-tab" data-tab="paste-panel">Paste text</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="file-panel" id="file-tab" data-tab="file-panel">Open a file</button>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="url-panel" aria-labelledby="url-tab">
+            <form id="url-form">
+              <label for="source-url">A public page or text-file URL</label>
+              <div class="input-action-row">
+                <input id="source-url" name="source-url" type="url" inputmode="url" placeholder="https://example.org/story.txt" autocomplete="url">
+                <button class="button button-red" type="submit" id="url-submit">Read URL</button>
+              </div>
+              <div class="url-options">
+                <label class="check-label">
+                  <input type="checkbox" id="reader-fallback" checked>
+                  <span>Use Jina Reader if the site blocks direct browser access</span>
+                </label>
+                <button class="inline-button" type="button" id="try-example">Try a public-domain text</button>
+              </div>
+              <p class="fine-print">The fallback sends only the requested URL to Jina AI Reader. Some paywalled, private, or protected pages still cannot be read.</p>
+            </form>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="paste-panel" aria-labelledby="paste-tab" hidden>
+            <form id="paste-form">
+              <label for="source-text">Paste a few sentences or a whole story</label>
+              <textarea id="source-text" rows="8" spellcheck="true"></textarea>
+              <div class="form-footer">
+                <span id="character-count">0 characters</span>
+                <button class="button button-red" type="submit">Build this deck</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="file-panel" aria-labelledby="file-tab" hidden>
+            <label class="drop-zone" for="source-file" id="drop-zone">
+              <input id="source-file" type="file" accept=".txt,.md,.html,.htm,text/plain,text/markdown,text/html">
+              <span class="drop-icon" aria-hidden="true">↥</span>
+              <strong>Drop a text or HTML file here</strong>
+              <span>or choose a file from your device</span>
+            </label>
+          </div>
+
+          <div class="load-status" id="load-status" role="status" aria-live="polite">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="status-text">The example deck is ready.</span>
+          </div>
+        </div>
+
+        <div class="stats" aria-label="Current model statistics">
+          <div><strong id="stat-words">0</strong><span>words read</span></div>
+          <div><strong id="stat-cards">0</strong><span>bigram cards</span></div>
+          <div><strong id="stat-unique">0</strong><span>unique pairs</span></div>
+          <div><strong id="stat-sentences">0</strong><span>sentence starts</span></div>
+        </div>
+      </section>
+
+      <section class="generator section-shell" id="generator" aria-labelledby="generator-title">
+        <div class="section-heading light-heading">
+          <p class="step-kicker"><span>02</span> Follow the chain</p>
+          <div>
+            <h2 id="generator-title">Generate a new sentence</h2>
+            <p>Start at X, draw a card, then find the pile that matches its blue word.</p>
+          </div>
+        </div>
+
+        <div class="generator-grid">
+          <div class="output-card">
+            <div class="output-card-topline">
+              <span>model output</span>
+              <span id="source-name">Example text</span>
+            </div>
+            <blockquote id="generated-text">Press the button to follow a new path through the cards.</blockquote>
+            <div class="chain-trail" id="chain-trail" aria-label="Cards used in this sentence"></div>
+            <p class="generation-note" id="generation-note">The same training text can lead to many different paths.</p>
+          </div>
+
+          <form class="generation-controls" id="generation-form">
+            <fieldset>
+              <legend>How should cards be drawn?</legend>
+              <label class="radio-card">
+                <input type="radio" name="replacement" value="with" checked>
+                <span><strong>With replacement</strong><small>Return every card. Repeats are possible.</small></span>
+              </label>
+              <label class="radio-card">
+                <input type="radio" name="replacement" value="without">
+                <span><strong>Without replacement</strong><small>Set each drawn card aside for this sentence.</small></span>
+              </label>
+            </fieldset>
+            <label class="range-label" for="max-words">
+              <span>Longest sentence</span>
+              <strong><span id="max-words-value">32</span> words</strong>
+            </label>
+            <input id="max-words" type="range" min="8" max="60" value="32" step="1">
+            <button class="button button-paper" type="submit">Make a sentence <span aria-hidden="true">↻</span></button>
+          </form>
+        </div>
+      </section>
+
+      <section class="deck section-shell" id="deck" aria-labelledby="deck-title">
+        <div class="section-heading">
+          <p class="step-kicker"><span>03</span> Look inside</p>
+          <div>
+            <h2 id="deck-title">Explore the card piles</h2>
+            <p>Every occurrence becomes a card. A number shows when the same pair appears more than once.</p>
+          </div>
+        </div>
+
+        <div class="deck-tools">
+          <label for="card-search">Find a red word</label>
+          <input id="card-search" type="search" placeholder="Try “the” or X" autocomplete="off">
+        </div>
+        <div class="card-piles" id="card-piles"></div>
+        <p class="deck-summary" id="deck-summary"></p>
+      </section>
+
+      <section class="explanation section-shell" id="how-it-works" aria-labelledby="how-title">
+        <div class="section-heading">
+          <p class="step-kicker"><span>04</span> Name the idea</p>
+          <div>
+            <h2 id="how-title">A big idea made from small rules</h2>
+            <p>This is a bigram model: it remembers two-word patterns, not meanings.</p>
+          </div>
+        </div>
+
+        <div class="rule-grid">
+          <article>
+            <span class="rule-number">1</span>
+            <h3>Break it into pairs</h3>
+            <p><span class="red-ink">Every red word</span> is followed by <span class="blue-ink">one blue word</span> from the source.</p>
+          </article>
+          <article>
+            <span class="rule-number">2</span>
+            <h3>Let X mark the edges</h3>
+            <p><strong>X → word</strong> starts a sentence. <strong>word → X</strong> ends one.</p>
+          </article>
+          <article>
+            <span class="rule-number">3</span>
+            <h3>Patterns steer chance</h3>
+            <p>Pairs that appeared more often have more cards, so they are more likely to be drawn.</p>
+          </article>
+        </div>
+
+        <aside class="reflection">
+          <p class="eyebrow">Questions for curious humans</p>
+          <ul>
+            <li>Which parts sound like the source—and which parts do not?</li>
+            <li>What changes when you add a very different kind of writing?</li>
+            <li>Who should get credit for a sentence generated from someone else's words?</li>
+          </ul>
+        </aside>
+      </section>
+    </main>
+
+    <footer>
+      <p><strong>Red Word, Blue Word</strong> is a transparent classroom experiment.</p>
+      <p>Built with plain HTML, CSS, and JavaScript. No accounts. No saved text.</p>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
+
