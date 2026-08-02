@@ -51,6 +51,7 @@ try {
     $index = [System.IO.File]::ReadAllText($indexPath, $utf8NoBom)
     $baseTag = '<base href="/' + $Prefix + '/">'
     $index = $index.Replace("<!-- DEPLOY_BASE -->", $baseTag)
+    $index = $index.Replace('href="#', ('href="/' + $Prefix + '#'))
     [System.IO.File]::WriteAllText($indexPath, $index, $utf8NoBom)
 
     Write-Host "Uploading static assets to s3://$Bucket/$Prefix/"
