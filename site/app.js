@@ -1,7 +1,17 @@
-import { BOUNDARY, buildModel, filterModel, generateSentences, groupCards } from "./model.js";
+import {
+  BOUNDARY,
+  buildModel,
+  createModelSnapshot,
+  filterModel,
+  groupCards,
+  loadModelSnapshot,
+} from "./model.js";
+import { createGeneratorScreen } from "./screens/generator-screen.js";
+import { createScreenRouter } from "./screens/router.js";
 
 const SAMPLE_TEXT = `The red kite climbs above the quiet park. The quiet park wakes under morning light. Morning light warms the red kite. A bluebird circles above the park. The bluebird sings and the kite climbs. Small patterns can make surprising stories.`;
 const MAX_SOURCE_CHARACTERS = 750_000;
+const MAX_MODEL_FILE_BYTES = 8_000_000;
 const COLLAPSED_BLUE_WORDS = 12;
 
 const elements = {
@@ -17,6 +27,9 @@ const elements = {
   characterCount: document.querySelector("#character-count"),
   fileInput: document.querySelector("#source-file"),
   dropZone: document.querySelector("#drop-zone"),
+  modelFileInput: document.querySelector("#model-file"),
+  modelDropZone: document.querySelector("#model-drop-zone"),
+  downloadModel: document.querySelector("#download-model"),
   loadStatus: document.querySelector("#load-status"),
   statusText: document.querySelector("#status-text"),
   sourceName: document.querySelector("#source-name"),
@@ -24,14 +37,6 @@ const elements = {
   statCards: document.querySelector("#stat-cards"),
   statUnique: document.querySelector("#stat-unique"),
   statSentences: document.querySelector("#stat-sentences"),
-  generationForm: document.querySelector("#generation-form"),
-  generatedList: document.querySelector("#generated-list"),
-  generationNote: document.querySelector("#generation-note"),
-  maxWords: document.querySelector("#max-words"),
-  maxWordsValue: document.querySelector("#max-words-value"),
-  sentenceCount: document.querySelector("#sentence-count"),
-  sentenceCountValue: document.querySelector("#sentence-count-value"),
-  generationSubmit: document.querySelector("#generation-submit"),
   boundaryCheck: document.querySelector("#boundary-check"),
   diagCharacters: document.querySelector("#diag-characters"),
   diagVocabulary: document.querySelector("#diag-vocabulary"),
@@ -39,6 +44,7 @@ const elements = {
   diagDuplicates: document.querySelector("#diag-duplicates"),
   diagPiles: document.querySelector("#diag-piles"),
   diagBranching: document.querySelector("#diag-branching"),
+  topStarts: document.querySelector("#top-starts"),
   topPairs: document.querySelector("#top-pairs"),
   firstTokens: document.querySelector("#first-tokens"),
   lastTokens: document.querySelector("#last-tokens"),
@@ -57,9 +63,12 @@ const elements = {
 
 let sourceModel = buildModel(SAMPLE_TEXT);
 let currentModel = sourceModel;
+let currentSourceLabel = "Example text";
 let deckPage = 1;
+let screenRouter;
 const removedWords = new Set();
 const expandedPiles = new Set();
+const generatorScreen = createGeneratorScreen({ getModel: () => currentModel });
 
 function number(value) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -121,6 +130,26 @@ function renderDiagnostics() {
   elements.diagBranching.textContent = `${number(diagnostics.branchingPileCount)} of ${number(diagnostics.redPileCount)}`;
   elements.boundaryCheck.textContent = `Boundary check: ${number(diagnostics.startCardCount)} starts / ${number(diagnostics.endCardCount)} ends · ${diagnostics.averageNextWordsPerPile.toFixed(1)} average / ${number(diagnostics.widestPileNextWordCount)} widest next-word choices`;
 
+  elements.topStarts.replaceChildren();
+  diagnostics.topStarts.forEach(({ word, count }) => {
+    const item = document.createElement("li");
+    const start = document.createElement("span");
+    start.className = "diagnostic-pair";
+    const boundary = document.createElement("strong");
+    boundary.className = "red-ink";
+    boundary.textContent = "X";
+    const arrow = document.createElement("span");
+    arrow.textContent = "→";
+    const startWord = document.createElement("strong");
+    startWord.className = "blue-ink";
+    startWord.textContent = word;
+    start.append(boundary, arrow, startWord);
+    const weight = document.createElement("small");
+    weight.textContent = `×${number(count)}`;
+    item.append(start, weight);
+    elements.topStarts.append(item);
+  });
+
   elements.topPairs.replaceChildren();
   diagnostics.topPairs.forEach(({ red, blue, count }) => {
     const item = document.createElement("li");
@@ -172,7 +201,7 @@ function removeWordFromModel(word) {
   deckPage = 1;
   updateStats();
   renderDeck();
-  makeSentences();
+  generatorScreen.generate();
 
   const removedNow = previousCardCount - currentModel.stats.cardCount;
   renderModelEdits(
@@ -189,7 +218,7 @@ function restoreRemovedWords() {
   deckPage = 1;
   updateStats();
   renderDeck();
-  makeSentences();
+  generatorScreen.generate();
   renderModelEdits();
   showStatus("All removed words and their cards have been restored.", "ready");
 }
@@ -292,55 +321,20 @@ function renderDeck() {
   elements.deckNext.disabled = deckPage >= pageCount;
 }
 
-function renderTrail(container, cards) {
-  cards.slice(0, 16).forEach(({ red, blue }) => {
-    const card = document.createElement("span");
-    card.className = "mini-card";
-    const redWord = document.createElement("span");
-    redWord.className = "red-ink";
-    redWord.textContent = displayWord(red);
-    const arrow = document.createElement("span");
-    arrow.textContent = "→";
-    const blueWord = document.createElement("span");
-    blueWord.className = "blue-ink";
-    blueWord.textContent = displayWord(blue);
-    card.append(redWord, arrow, blueWord);
-    container.append(card);
-  });
-  if (cards.length > 16) {
-    const more = document.createElement("span");
-    more.className = "trail-more";
-    more.textContent = `+${cards.length - 16} cards`;
-    container.append(more);
-  }
-}
-
-function renderGeneratedResult(result, index, revealPath) {
-  const item = document.createElement("li");
-  item.className = "generated-result";
-
-  const sentenceRow = document.createElement("div");
-  sentenceRow.className = "sentence-row";
-  const sentenceNumber = document.createElement("span");
-  sentenceNumber.className = "sentence-number";
-  sentenceNumber.textContent = String(index + 1).padStart(2, "0");
-  const sentenceText = document.createElement("blockquote");
-  sentenceText.textContent = result.text || "This path could not make a sentence.";
-  sentenceRow.append(sentenceNumber, sentenceText);
-
-  const details = document.createElement("details");
-  details.className = "path-details";
-  details.open = revealPath;
-  const summary = document.createElement("summary");
-  summary.textContent = `${number(result.cards.length)} card${result.cards.length === 1 ? "" : "s"} in this path`;
-  const trail = document.createElement("div");
-  trail.className = "chain-trail";
-  trail.setAttribute("aria-label", `Cards used in sentence ${index + 1}`);
-  renderTrail(trail, result.cards);
-  details.append(summary, trail);
-
-  item.append(sentenceRow, details);
-  return item;
+function installModel(nextSourceModel, nextCurrentModel, sourceLabel) {
+  sourceModel = nextSourceModel;
+  currentModel = nextCurrentModel;
+  currentSourceLabel = sourceLabel;
+  removedWords.clear();
+  currentModel.removedWords.forEach((word) => removedWords.add(word));
+  expandedPiles.clear();
+  deckPage = 1;
+  elements.sourceName.textContent = sourceLabel;
+  elements.cardSearch.value = "";
+  updateStats();
+  renderDeck();
+  renderModelEdits();
+  generatorScreen.generate();
 }
 
 function train(text, sourceLabel) {
@@ -349,40 +343,56 @@ function train(text, sourceLabel) {
   if (nextModel.stats.wordCount < 2) {
     throw new Error("Add at least two words so there is a pattern to follow.");
   }
-  sourceModel = nextModel;
-  currentModel = sourceModel;
-  removedWords.clear();
-  expandedPiles.clear();
-  deckPage = 1;
-  elements.sourceName.textContent = sourceLabel;
-  elements.cardSearch.value = "";
-  updateStats();
-  renderDeck();
-  renderModelEdits();
-  makeSentences();
+  installModel(nextModel, nextModel, sourceLabel);
   return clipped.length < String(text ?? "").length;
 }
 
-function makeSentences() {
-  const withReplacement = document.querySelector("input[name='replacement']:checked").value === "with";
-  const count = Number(elements.sentenceCount.value);
-  const results = generateSentences(currentModel, count, {
-    withReplacement,
-    maxWords: Number(elements.maxWords.value),
-  });
-  elements.generatedList.replaceChildren(
-    ...results.map((result, index) => renderGeneratedResult(result, index, results.length === 1))
-  );
+function safeFilename(label) {
+  return String(label ?? "model")
+    .toLocaleLowerCase("en-US")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "model";
+}
 
-  const completed = results.filter(({ reason }) => reason === "boundary").length;
-  const limited = results.filter(({ reason }) => reason === "maximum").length;
-  const deadEnds = results.filter(({ reason }) => reason === "dead-end").length;
-  const emptyPaths = results.filter(({ reason }) => reason === "empty").length;
-  const notes = [`${number(completed)} of ${number(results.length)} reached the X boundary`];
-  if (limited) notes.push(`${number(limited)} hit the word limit`);
-  if (deadEnds) notes.push(`${number(deadEnds)} ran out of an available card`);
-  if (emptyPaths) notes.push(`${number(emptyPaths)} could not start from X`);
-  elements.generationNote.textContent = `${notes.join(" · ")}. Open a result to inspect its path.`;
+function downloadCurrentModel() {
+  const snapshot = createModelSnapshot(currentModel, { sourceLabel: currentSourceLabel });
+  const blob = new Blob([`${JSON.stringify(snapshot, null, 2)}\n`], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${safeFilename(currentSourceLabel)}.rwbw.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  const originalLabel = elements.downloadModel.textContent;
+  elements.downloadModel.textContent = "Model downloaded";
+  window.setTimeout(() => {
+    elements.downloadModel.textContent = originalLabel;
+  }, 1800);
+}
+
+async function loadSavedModel(file) {
+  if (!file) return;
+  if (file.size > MAX_MODEL_FILE_BYTES) {
+    showStatus("That saved model is unexpectedly large.", "error");
+    return;
+  }
+  try {
+    const loaded = loadModelSnapshot(await file.text());
+    installModel(loaded.sourceModel, loaded.model, loaded.sourceLabel);
+    const removedCount = loaded.model.removedWords.length;
+    showStatus(
+      `Loaded ${file.name} with ${number(removedCount)} pruned word${removedCount === 1 ? "" : "s"}.`,
+      "ready"
+    );
+    elements.modelFileInput.value = "";
+    screenRouter.navigate("model");
+  } catch (error) {
+    showStatus(error.message, "error");
+  }
 }
 
 function textFromHtml(html) {
@@ -499,6 +509,8 @@ elements.sampleUrls.forEach((button) => button.addEventListener("click", () => {
 }));
 
 elements.fileInput.addEventListener("change", () => loadFile(elements.fileInput.files[0]));
+elements.modelFileInput.addEventListener("change", () => loadSavedModel(elements.modelFileInput.files[0]));
+elements.downloadModel.addEventListener("click", downloadCurrentModel);
 
 ['dragenter', 'dragover'].forEach((eventName) => {
   elements.dropZone.addEventListener(eventName, (event) => {
@@ -516,22 +528,21 @@ elements.fileInput.addEventListener("change", () => loadFile(elements.fileInput.
 
 elements.dropZone.addEventListener("drop", (event) => loadFile(event.dataTransfer.files[0]));
 
-elements.generationForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  makeSentences();
+['dragenter', 'dragover'].forEach((eventName) => {
+  elements.modelDropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    elements.modelDropZone.classList.add("is-dragging");
+  });
 });
 
-elements.maxWords.addEventListener("input", () => {
-  elements.maxWordsValue.textContent = elements.maxWords.value;
+['dragleave', 'drop'].forEach((eventName) => {
+  elements.modelDropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    elements.modelDropZone.classList.remove("is-dragging");
+  });
 });
 
-elements.sentenceCount.addEventListener("input", () => {
-  const count = Number(elements.sentenceCount.value);
-  const noun = count === 1 ? "sentence" : "sentences";
-  elements.sentenceCountValue.textContent = String(count);
-  elements.sentenceCountValue.parentElement.lastChild.textContent = ` ${noun}`;
-  elements.generationSubmit.firstChild.textContent = `Generate ${count} ${noun} `;
-});
+elements.modelDropZone.addEventListener("drop", (event) => loadSavedModel(event.dataTransfer.files[0]));
 
 elements.cardSearch.addEventListener("input", () => {
   deckPage = 1;
@@ -562,6 +573,7 @@ elements.deckNext.addEventListener("click", () => {
 
 elements.restoreWords.addEventListener("click", restoreRemovedWords);
 
+screenRouter = createScreenRouter({ defaultScreen: "source" });
 updateStats();
 renderDeck();
 renderModelEdits();

@@ -11,6 +11,12 @@ Red-word piles can be sorted, searched, paged, expanded, or clicked to remove
 that word from both sides of every card; all removals can be restored without
 re-importing the source. It is a bigram/Markov model, not a neural language model.
 
+The interface is split into Source, Generate, Model, and Learn screens. Cleaned
+models can be downloaded as `.rwbw.json` files and loaded again later with their
+pruned-word lists intact. Generation results expose complete bigram chains and
+per-step choice data for the planned slot-machine renderer described in
+[`docs/slot-machine-generation.md`](docs/slot-machine-generation.md).
+
 ## What it can read
 
 - Text pasted into the page
