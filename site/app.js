@@ -1,9 +1,9 @@
 import {
   BOUNDARY,
   buildModel,
-  collapseCards,
   createModelSnapshot,
   filterModel,
+  gardenPathCards,
   groupCards,
   loadModelSnapshot,
 } from "./model.js";
@@ -255,9 +255,9 @@ function restoreRemovedWords() {
 
 function renderDeck() {
   const query = elements.cardSearch.value.trim().toLocaleLowerCase("en-US");
-  const collapsed = elements.cardView.value === "collapsed";
-  const cards = collapsed
-    ? collapseCards(currentModel, { sortBy: elements.cardSort.value })
+  const gardenView = elements.cardView.value === "garden-paths";
+  const cards = gardenView
+    ? gardenPathCards(currentModel, { sortBy: elements.cardSort.value })
     : groupCards(currentModel, { sortBy: elements.cardSort.value });
   const matching = cards.filter(({ red }) => !query || red.toLocaleLowerCase("en-US").includes(query));
   const pageSize = Number(elements.cardPageSize.value);
@@ -269,7 +269,7 @@ function renderDeck() {
 
   visible.forEach((card) => {
     const pile = document.createElement("article");
-    pile.className = collapsed ? "card-pile virtual-card" : "card-pile bigram-pile";
+    pile.className = gardenView ? "card-pile garden-path-card" : "card-pile bigram-pile";
 
     const redSide = document.createElement(card.red === BOUNDARY ? "div" : "button");
     redSide.className = "pile-red";
@@ -288,8 +288,8 @@ function renderDeck() {
     redWord.textContent = displayWord(card.red);
     const redMeta = document.createElement("small");
     redMeta.className = "pile-meta";
-    redMeta.textContent = collapsed
-      ? `${number(card.count)} occurrence${card.count === 1 ? "" : "s"} · ${number(card.bluePath.length)} blue-side word${card.bluePath.length === 1 ? "" : "s"}`
+    redMeta.textContent = gardenView
+      ? `${number(card.count)} occurrence${card.count === 1 ? "" : "s"} · ${number(card.blackWords.length)} black word${card.blackWords.length === 1 ? "" : "s"} · 1 blue word`
       : `${number(card.total)} card${card.total === 1 ? "" : "s"} · ${number(card.blueWords.length)} blue choice${card.blueWords.length === 1 ? "" : "s"}`;
     redSide.append(redLabel, redWord, redMeta);
 
@@ -300,21 +300,24 @@ function renderDeck() {
 
     const blueSide = document.createElement("div");
     blueSide.className = "pile-blues";
-    if (collapsed) {
-      blueSide.classList.add("virtual-blue-side");
+    if (gardenView) {
+      blueSide.classList.add("garden-path-side");
       const phrase = document.createElement("span");
-      phrase.className = "virtual-blue-path";
+      phrase.className = "garden-path-words";
       phrase.setAttribute(
         "aria-label",
-        `Blue side: ${card.bluePath.map((word) => displayWord(word)).join(" ")}`
+        `Garden path: ${card.blackWords.length ? `${card.blackWords.join(" ")}, then ` : ""}${displayWord(card.blue)} in blue; next red word ${displayWord(card.blue)}`
       );
-      card.bluePath.forEach((word, index) => {
+      card.blackWords.forEach((word) => {
         const token = document.createElement("span");
-        token.className = "virtual-blue-token";
-        if (index === card.bluePath.length - 1) token.classList.add("is-final");
-        token.textContent = word === BOUNDARY ? "X · end" : word;
+        token.className = "garden-path-word garden-path-black";
+        token.textContent = word;
         phrase.append(token);
       });
+      const blueToken = document.createElement("span");
+      blueToken.className = "garden-path-word garden-path-blue";
+      blueToken.textContent = card.blue === BOUNDARY ? "X · end" : card.blue;
+      phrase.append(blueToken);
       blueSide.append(phrase);
 
       if (card.sourceSequence.length >= 3) {
@@ -371,17 +374,17 @@ function renderDeck() {
     empty.className = "empty-deck";
     empty.textContent = query
       ? `No red word matches “${elements.cardSearch.value.trim()}”.`
-      : "No virtual cards remain in this model.";
+      : "No garden-path cards remain in this model.";
     elements.cardPiles.append(empty);
   }
 
   if (matching.length) {
     const end = start + visible.length;
     const scope = query ? `${number(matching.length)} matching` : number(matching.length);
-    const kind = collapsed ? "collapsed virtual cards" : "red-word bigram piles";
+    const kind = gardenView ? "garden-path cards" : "red-word bigram piles";
     elements.deckSummary.textContent = `Showing ${number(start + 1)}–${number(end)} of ${scope} ${kind}${query ? ` (${number(cards.length)} total)` : ""}.`;
   } else {
-    const kind = collapsed ? "collapsed virtual cards" : "red-word bigram piles";
+    const kind = gardenView ? "garden-path cards" : "red-word bigram piles";
     elements.deckSummary.textContent = `0 of ${number(cards.length)} ${kind}.`;
   }
   elements.deckPageStatus.textContent = `Page ${number(deckPage)} of ${number(pageCount)}`;

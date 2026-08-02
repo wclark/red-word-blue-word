@@ -4,9 +4,9 @@ import test from "node:test";
 import {
   BOUNDARY,
   buildModel,
-  collapseCards,
   createModelSnapshot,
   filterModel,
+  gardenPathCards,
   generateSentence,
   generateSentences,
   groupCards,
@@ -129,29 +129,41 @@ test("groupCards can sort piles by frequency and branching", () => {
   assert.equal(byBranching[1].blueWords.length, 3);
 });
 
-test("collapseCards removes deterministic intermediate piles", () => {
+test("gardenPathCards removes deterministic intermediate piles", () => {
   const model = buildModel("Start one fork left. Start one fork right.");
-  const cards = collapseCards(model);
+  const cards = gardenPathCards(model);
 
   assert.equal(groupCards(model).length, 6);
   assert.equal(cards.length, 3);
   assert.deepEqual(cards[0], {
     red: BOUNDARY,
-    bluePath: ["start", "one", "fork"],
-    finalBlue: "fork",
+    blackWords: ["start", "one"],
+    blue: "fork",
+    firstWord: "start",
     count: 2,
     total: 2,
     choiceCount: 1,
+    bigramCount: 3,
     sourceSequence: ["start", "one", "fork"],
   });
   assert.deepEqual(
-    cards.filter(({ red }) => red === "fork").map(({ bluePath }) => bluePath),
-    [["left", BOUNDARY], ["right", BOUNDARY]]
+    cards.filter(({ red }) => red === "fork").map(({ blackWords, blue }) => [blackWords, blue]),
+    [[["left"], BOUNDARY], [["right"], BOUNDARY]]
   );
   assert.ok(cards.every(({ red }) => !["start", "one", "left", "right"].includes(red)));
 });
 
-test("collapseCards keeps one stable anchor for a deterministic cycle", () => {
+test("a garden-path card can have zero black words before its blue juncture", () => {
+  const model = buildModel("Fork left. Fork right. Other fork left.");
+  const directJuncture = gardenPathCards(model)
+    .find(({ red, firstWord }) => red === BOUNDARY && firstWord === "fork");
+
+  assert.deepEqual(directJuncture.blackWords, []);
+  assert.equal(directJuncture.blue, "fork");
+  assert.equal(directJuncture.bigramCount, 1);
+});
+
+test("gardenPathCards keeps one stable anchor for a deterministic cycle", () => {
   const model = {
     transitions: new Map([
       ["beta", [{ red: "beta", blue: "alpha" }]],
@@ -159,27 +171,32 @@ test("collapseCards keeps one stable anchor for a deterministic cycle", () => {
     ]),
   };
 
-  assert.deepEqual(collapseCards(model), [{
+  assert.deepEqual(gardenPathCards(model), [{
     red: "alpha",
-    bluePath: ["beta", "alpha"],
-    finalBlue: "alpha",
+    blackWords: ["beta"],
+    blue: "alpha",
+    firstWord: "beta",
     count: 1,
     total: 1,
     choiceCount: 1,
+    bigramCount: 2,
     sourceSequence: ["alpha", "beta", "alpha"],
   }]);
 });
 
-test("collapsed virtual cards can be sorted by path frequency", () => {
+test("garden-path cards can be sorted by path frequency", () => {
   const model = buildModel("Start fork right. Start fork right. Start fork left.");
-  const alphabetical = collapseCards(model).filter(({ red }) => red === "fork");
-  const frequent = collapseCards(model, { sortBy: "frequency-desc" })
+  const alphabetical = gardenPathCards(model).filter(({ red }) => red === "fork");
+  const frequent = gardenPathCards(model, { sortBy: "frequency-desc" })
     .filter(({ red }) => red === "fork");
 
-  assert.deepEqual(alphabetical.map(({ bluePath }) => bluePath), [["left", BOUNDARY], ["right", BOUNDARY]]);
-  assert.deepEqual(frequent.map(({ bluePath, count }) => [bluePath, count]), [
-    [["right", BOUNDARY], 2],
-    [["left", BOUNDARY], 1],
+  assert.deepEqual(alphabetical.map(({ blackWords, blue }) => [blackWords, blue]), [
+    [["left"], BOUNDARY],
+    [["right"], BOUNDARY],
+  ]);
+  assert.deepEqual(frequent.map(({ blackWords, blue, count }) => [blackWords, blue, count]), [
+    [["right"], BOUNDARY, 2],
+    [["left"], BOUNDARY, 1],
   ]);
 });
 
@@ -251,6 +268,41 @@ test("generation follows a deterministic complete chain", () => {
     cardId: 0,
   });
   assert.equal(result.steps.at(-1).chosen, BOUNDARY);
+  assert.equal(result.gardenPathCards.length, 1);
+  assert.deepEqual(result.gardenPathCards[0].blackWords, ["bright", "birds", "sing"]);
+  assert.equal(result.gardenPathCards[0].blue, BOUNDARY);
+  assert.equal(result.gardenPathCards[0].underlyingCards.length, 4);
+});
+
+test("generation groups raw bigrams into juncture-to-juncture garden-path cards", () => {
+  const model = buildModel("Start one fork left. Start one fork right.");
+  const result = generateSentence(model, { random: () => 0 });
+
+  assert.equal(result.cards.length, 5);
+  assert.equal(result.gardenPathCards.length, 2);
+  assert.deepEqual(
+    result.gardenPathCards.map(({ red, blackWords, blue, choiceCount }) => ({
+      red,
+      blackWords,
+      blue,
+      choiceCount,
+    })),
+    [
+      { red: BOUNDARY, blackWords: ["start", "one"], blue: "fork", choiceCount: 1 },
+      { red: "fork", blackWords: ["left"], blue: BOUNDARY, choiceCount: 2 },
+    ]
+  );
+  assert.deepEqual(
+    result.gardenPathCards[1].options.map(({ blackWords, blue, count }) => ({ blackWords, blue, count })),
+    [
+      { blackWords: ["left"], blue: BOUNDARY, count: 1 },
+      { blackWords: ["right"], blue: BOUNDARY, count: 1 },
+    ]
+  );
+  assert.deepEqual(
+    result.gardenPathCards.flatMap(({ underlyingCards }) => underlyingCards.map(({ id }) => id)),
+    result.cards.map(({ id }) => id)
+  );
 });
 
 test("without replacement can exhaust a looping pile", () => {
