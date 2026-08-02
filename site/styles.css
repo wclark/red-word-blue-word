@@ -607,11 +607,10 @@ button.pile-red:hover { background: #ffd5cd; }
 .pile-red .pile-meta { margin-top: 0.45rem; color: var(--muted); font: 700 0.68rem/1.3 ui-monospace, Consolas, monospace; }
 .pile-arrow { padding: 0 1rem; align-self: center; color: #918879; font-size: 1.4rem; }
 .pile-blues { padding: 0.8rem 1rem 0.8rem 0; display: flex; flex-wrap: wrap; align-content: center; gap: 0.45rem; }
-.pile-blues-deterministic { flex-direction: column; align-items: flex-start; justify-content: center; }
-.deterministic-run { display: grid; gap: 0.45rem; }
-.deterministic-label { color: var(--muted); font: 800 0.65rem/1 ui-monospace, Consolas, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
-.deterministic-phrase { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.deterministic-phrase span { padding: 0.38rem 0.55rem; color: var(--blue-dark); background: var(--blue-wash); border: 1px solid #b9d4f3; border-radius: 5px; font-weight: 750; }
+.virtual-blue-side { flex-direction: column; align-items: flex-start; justify-content: center; }
+.virtual-blue-path { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.virtual-blue-token { padding: 0.38rem 0.55rem; color: #4f493f; background: var(--paper); border: 1px solid #d3c9b8; border-radius: 5px; font-weight: 750; }
+.virtual-blue-token.is-final { color: var(--blue-dark); background: var(--blue-wash); border-color: #99bde9; box-shadow: inset 0 -3px 0 #c5dbf5; }
 .sequence-remove { padding: 0; color: #8f241f; background: transparent; border: 0; border-bottom: 1px solid currentColor; font-size: 0.72rem; font-weight: 800; cursor: pointer; }
 .sequence-remove:hover { color: var(--red); }
 .blue-chip, .more-chip { padding: 0.38rem 0.55rem; display: inline-flex; align-items: center; gap: 0.35rem; border-radius: 5px; }

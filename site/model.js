@@ -341,36 +341,116 @@ export function generateSentences(model, count, options = {}) {
   return Array.from({ length: sentenceCount }, () => generateSentence(model, options));
 }
 
-function deterministicPathFrom(model, startRed) {
-  const path = [];
-  const visited = new Set([startRed]);
-  let red = startRed;
+function blueWordCounts(cards = []) {
+  const counts = new Map();
+  cards.forEach(({ blue }) => counts.set(blue, (counts.get(blue) ?? 0) + 1));
+  return [...counts.entries()]
+    .map(([blue, count]) => ({ blue, count }))
+    .sort((a, b) => b.count - a.count || a.blue.localeCompare(b.blue));
+}
 
-  while (true) {
-    const choices = [...new Set((model.transitions.get(red) ?? []).map(({ blue }) => blue))];
-    if (choices.length !== 1) break;
-    const blue = choices[0];
-    path.push(blue);
-    if (blue === BOUNDARY || visited.has(blue)) break;
-    visited.add(blue);
-    red = blue;
+function compareCardRows(a, b, sortBy) {
+  if (a.red === BOUNDARY && b.red !== BOUNDARY) return -1;
+  if (b.red === BOUNDARY && a.red !== BOUNDARY) return 1;
+  const alphabetical = a.red.localeCompare(b.red) ||
+    (a.bluePath ?? []).join(" ").localeCompare((b.bluePath ?? []).join(" "));
+  if (sortBy === "alphabetical-desc") return -alphabetical;
+  if (sortBy === "frequency-desc") return b.count - a.count || b.total - a.total || alphabetical;
+  if (sortBy === "frequency-asc") return a.count - b.count || a.total - b.total || alphabetical;
+  if (sortBy === "branching-desc") {
+    return b.choiceCount - a.choiceCount || b.total - a.total || alphabetical;
   }
-  return path;
+  return alphabetical;
+}
+
+function collapsedAnchorWords(model) {
+  const choiceWords = new Map(
+    [...model.transitions].map(([red, cards]) => [
+      red,
+      [...new Set(cards.map(({ blue }) => blue))],
+    ])
+  );
+  const anchors = new Set([BOUNDARY]);
+
+  choiceWords.forEach((choices, red) => {
+    if (choices.length !== 1) anchors.add(red);
+  });
+
+  // A deterministic cycle has no natural branching anchor. Retain one stable
+  // representative so the cycle is visible and path construction terminates.
+  choiceWords.forEach((_choices, start) => {
+    if (anchors.has(start)) return;
+    const path = [];
+    const indexes = new Map();
+    let red = start;
+
+    while (red !== BOUNDARY && !anchors.has(red) && choiceWords.has(red)) {
+      if (indexes.has(red)) {
+        const cycle = path.slice(indexes.get(red));
+        anchors.add([...cycle].sort((a, b) => a.localeCompare(b))[0]);
+        break;
+      }
+      indexes.set(red, path.length);
+      path.push(red);
+      const choices = choiceWords.get(red);
+      if (choices.length !== 1) break;
+      red = choices[0];
+    }
+  });
+
+  return { anchors, choiceWords };
+}
+
+export function collapseCards(model, options = {}) {
+  const sortBy = typeof options === "string" ? options : options.sortBy ?? "alphabetical";
+  if (!model?.transitions?.size) return [];
+  const { anchors, choiceWords } = collapsedAnchorWords(model);
+  const rows = [];
+
+  anchors.forEach((red) => {
+    const sourceCards = model.transitions.get(red) ?? [];
+    if (!sourceCards.length) return;
+    const choices = blueWordCounts(sourceCards);
+
+    choices.forEach(({ blue, count }) => {
+      const bluePath = [blue];
+      let nextRed = blue;
+      let safety = model.transitions.size + 1;
+
+      while (
+        safety > 0 &&
+        nextRed !== BOUNDARY &&
+        !anchors.has(nextRed) &&
+        choiceWords.get(nextRed)?.length === 1
+      ) {
+        nextRed = choiceWords.get(nextRed)[0];
+        bluePath.push(nextRed);
+        safety -= 1;
+      }
+
+      rows.push({
+        red,
+        bluePath,
+        finalBlue: bluePath.at(-1),
+        count,
+        total: sourceCards.length,
+        choiceCount: choices.length,
+        sourceSequence: [red, ...bluePath].filter((word) => word !== BOUNDARY),
+      });
+    });
+  });
+
+  return rows.sort((a, b) => compareCardRows(a, b, sortBy));
 }
 
 export function groupCards(model, options = {}) {
   const sortBy = typeof options === "string" ? options : options.sortBy ?? "alphabetical";
   return [...model.transitions.entries()]
     .map(([red, cards]) => {
-      const counts = new Map();
-      cards.forEach(({ blue }) => counts.set(blue, (counts.get(blue) ?? 0) + 1));
       return {
         red,
         total: cards.length,
-        deterministicPath: deterministicPathFrom(model, red),
-        blueWords: [...counts.entries()]
-          .map(([blue, count]) => ({ blue, count }))
-          .sort((a, b) => b.count - a.count || a.blue.localeCompare(b.blue)),
+        blueWords: blueWordCounts(cards),
       };
     })
     .sort((a, b) => {

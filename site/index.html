@@ -202,8 +202,8 @@
         <div class="section-heading">
           <p class="step-kicker"><span>02</span> Clean the model</p>
           <div>
-            <h2 id="deck-title">Explore the card piles</h2>
-            <p>Remove a red word everywhere, or remove a fixed source sequence before its bigrams are rebuilt.</p>
+            <h2 id="deck-title">Explore the virtual cards</h2>
+            <p>Each card starts with one red word. Predetermined words stay neutral on the blue side; only the final word is blue and points to the next card.</p>
           </div>
         </div>
 
@@ -269,16 +269,22 @@
             <input id="card-search" type="search" placeholder="Try “the” or X" autocomplete="off">
           </div>
           <div class="deck-view-controls">
-            <label for="card-sort">Sort piles
+            <label for="card-view">Card view
+              <select id="card-view">
+                <option value="collapsed" selected>Collapsed paths</option>
+                <option value="bigrams">All bigram piles</option>
+              </select>
+            </label>
+            <label for="card-sort">Sort cards
               <select id="card-sort">
                 <option value="alphabetical">A to Z</option>
                 <option value="alphabetical-desc">Z to A</option>
-                <option value="frequency-desc">Most cards</option>
-                <option value="frequency-asc">Fewest cards</option>
+                <option value="frequency-desc">Most frequent</option>
+                <option value="frequency-asc">Least frequent</option>
                 <option value="branching-desc">Most blue choices</option>
               </select>
             </label>
-            <label for="card-page-size">Piles per page
+            <label for="card-page-size">Cards per page
               <select id="card-page-size">
                 <option value="10">10</option>
                 <option value="25" selected>25</option>
@@ -292,7 +298,7 @@
         <div class="card-piles" id="card-piles"></div>
         <div class="deck-footer">
           <p class="deck-summary" id="deck-summary" aria-live="polite"></p>
-          <nav class="deck-pagination" aria-label="Red-word pile pages">
+          <nav class="deck-pagination" aria-label="Virtual card pages">
             <button type="button" id="deck-previous">Previous</button>
             <span id="deck-page-status">Page 1 of 1</span>
             <button type="button" id="deck-next">Next</button>

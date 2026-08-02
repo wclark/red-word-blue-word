@@ -1,6 +1,7 @@
 import {
   BOUNDARY,
   buildModel,
+  collapseCards,
   createModelSnapshot,
   filterModel,
   groupCards,
@@ -49,6 +50,7 @@ const elements = {
   firstTokens: document.querySelector("#first-tokens"),
   lastTokens: document.querySelector("#last-tokens"),
   cardSearch: document.querySelector("#card-search"),
+  cardView: document.querySelector("#card-view"),
   cardSort: document.querySelector("#card-sort"),
   cardPageSize: document.querySelector("#card-page-size"),
   cardPiles: document.querySelector("#card-piles"),
@@ -253,8 +255,11 @@ function restoreRemovedWords() {
 
 function renderDeck() {
   const query = elements.cardSearch.value.trim().toLocaleLowerCase("en-US");
-  const groups = groupCards(currentModel, { sortBy: elements.cardSort.value });
-  const matching = groups.filter(({ red }) => !query || red.toLocaleLowerCase("en-US").includes(query));
+  const collapsed = elements.cardView.value === "collapsed";
+  const cards = collapsed
+    ? collapseCards(currentModel, { sortBy: elements.cardSort.value })
+    : groupCards(currentModel, { sortBy: elements.cardSort.value });
+  const matching = cards.filter(({ red }) => !query || red.toLocaleLowerCase("en-US").includes(query));
   const pageSize = Number(elements.cardPageSize.value);
   const pageCount = Math.max(1, Math.ceil(matching.length / pageSize));
   deckPage = Math.min(Math.max(1, deckPage), pageCount);
@@ -262,28 +267,30 @@ function renderDeck() {
   const visible = matching.slice(start, start + pageSize);
   elements.cardPiles.replaceChildren();
 
-  visible.forEach((group) => {
+  visible.forEach((card) => {
     const pile = document.createElement("article");
-    pile.className = "card-pile";
+    pile.className = collapsed ? "card-pile virtual-card" : "card-pile bigram-pile";
 
-    const redSide = document.createElement(group.red === BOUNDARY ? "div" : "button");
+    const redSide = document.createElement(card.red === BOUNDARY ? "div" : "button");
     redSide.className = "pile-red";
-    if (group.red !== BOUNDARY) {
+    if (card.red !== BOUNDARY) {
       redSide.type = "button";
       redSide.setAttribute(
         "aria-label",
-        `Remove ${group.red} and every card that references it from the model`
+        `Remove ${card.red} and every card that references it from the model`
       );
-      redSide.title = `Remove “${group.red}” from the model`;
-      redSide.addEventListener("click", () => removeWordFromModel(group.red));
+      redSide.title = `Remove “${card.red}” from the model`;
+      redSide.addEventListener("click", () => removeWordFromModel(card.red));
     }
     const redLabel = document.createElement("span");
-    redLabel.textContent = group.red === BOUNDARY ? "protected boundary" : "click to remove";
+    redLabel.textContent = card.red === BOUNDARY ? "protected boundary" : "click to remove";
     const redWord = document.createElement("strong");
-    redWord.textContent = displayWord(group.red);
+    redWord.textContent = displayWord(card.red);
     const redMeta = document.createElement("small");
     redMeta.className = "pile-meta";
-    redMeta.textContent = `${number(group.total)} card${group.total === 1 ? "" : "s"} · ${number(group.blueWords.length)} blue choice${group.blueWords.length === 1 ? "" : "s"}`;
+    redMeta.textContent = collapsed
+      ? `${number(card.count)} occurrence${card.count === 1 ? "" : "s"} · ${number(card.bluePath.length)} blue-side word${card.bluePath.length === 1 ? "" : "s"}`
+      : `${number(card.total)} card${card.total === 1 ? "" : "s"} · ${number(card.blueWords.length)} blue choice${card.blueWords.length === 1 ? "" : "s"}`;
     redSide.append(redLabel, redWord, redMeta);
 
     const arrow = document.createElement("span");
@@ -293,39 +300,38 @@ function renderDeck() {
 
     const blueSide = document.createElement("div");
     blueSide.className = "pile-blues";
-    if (group.deterministicPath.length > 1) {
-      blueSide.classList.add("pile-blues-deterministic");
-      const run = document.createElement("div");
-      run.className = "deterministic-run";
-      const runLabel = document.createElement("span");
-      runLabel.className = "deterministic-label";
-      runLabel.textContent = group.total > 1 ? `fixed path · starts ×${number(group.total)}` : "fixed path";
+    if (collapsed) {
+      blueSide.classList.add("virtual-blue-side");
       const phrase = document.createElement("span");
-      phrase.className = "deterministic-phrase";
-      group.deterministicPath.forEach((word) => {
+      phrase.className = "virtual-blue-path";
+      phrase.setAttribute(
+        "aria-label",
+        `Blue side: ${card.bluePath.map((word) => displayWord(word)).join(" ")}`
+      );
+      card.bluePath.forEach((word, index) => {
         const token = document.createElement("span");
+        token.className = "virtual-blue-token";
+        if (index === card.bluePath.length - 1) token.classList.add("is-final");
         token.textContent = word === BOUNDARY ? "X · end" : word;
         phrase.append(token);
       });
-      run.append(runLabel, phrase);
-      blueSide.append(run);
+      blueSide.append(phrase);
 
-      const sequence = [group.red, ...group.deterministicPath].filter((word) => word !== BOUNDARY);
-      if (group.red !== BOUNDARY && sequence.length >= 3) {
+      if (card.sourceSequence.length >= 3) {
         const removeSequence = document.createElement("button");
         removeSequence.type = "button";
         removeSequence.className = "sequence-remove";
         removeSequence.setAttribute(
           "aria-label",
-          `Remove sequence ${sequence.join(" ")} from the source before rebuilding bigrams`
+          `Remove sequence ${card.sourceSequence.join(" ")} from the source before rebuilding bigrams`
         );
-        removeSequence.textContent = `Remove this ${number(sequence.length)}-word source sequence`;
-        removeSequence.addEventListener("click", () => removeSequenceFromModel(sequence));
+        removeSequence.textContent = `Remove this ${number(card.sourceSequence.length)}-word source sequence`;
+        removeSequence.addEventListener("click", () => removeSequenceFromModel(card.sourceSequence));
         blueSide.append(removeSequence);
       }
     } else {
-      const expanded = expandedPiles.has(group.red);
-      const displayedBlueWords = expanded ? group.blueWords : group.blueWords.slice(0, COLLAPSED_BLUE_WORDS);
+      const expanded = expandedPiles.has(card.red);
+      const displayedBlueWords = expanded ? card.blueWords : card.blueWords.slice(0, COLLAPSED_BLUE_WORDS);
       displayedBlueWords.forEach(({ blue, count }) => {
         const chip = document.createElement("span");
         chip.className = "blue-chip";
@@ -339,17 +345,17 @@ function renderDeck() {
         }
         blueSide.append(chip);
       });
-      if (group.blueWords.length > COLLAPSED_BLUE_WORDS) {
+      if (card.blueWords.length > COLLAPSED_BLUE_WORDS) {
         const more = document.createElement("button");
         more.type = "button";
         more.className = "more-chip";
         more.setAttribute("aria-expanded", String(expanded));
         more.textContent = expanded
           ? "Show fewer"
-          : `Show ${number(group.blueWords.length - COLLAPSED_BLUE_WORDS)} more`;
+          : `Show ${number(card.blueWords.length - COLLAPSED_BLUE_WORDS)} more`;
         more.addEventListener("click", () => {
-          if (expanded) expandedPiles.delete(group.red);
-          else expandedPiles.add(group.red);
+          if (expanded) expandedPiles.delete(card.red);
+          else expandedPiles.add(card.red);
           renderDeck();
         });
         blueSide.append(more);
@@ -364,17 +370,19 @@ function renderDeck() {
     const empty = document.createElement("p");
     empty.className = "empty-deck";
     empty.textContent = query
-      ? `No red-word pile matches “${elements.cardSearch.value.trim()}”.`
-      : "No red-word piles remain in this model.";
+      ? `No red word matches “${elements.cardSearch.value.trim()}”.`
+      : "No virtual cards remain in this model.";
     elements.cardPiles.append(empty);
   }
 
   if (matching.length) {
     const end = start + visible.length;
     const scope = query ? `${number(matching.length)} matching` : number(matching.length);
-    elements.deckSummary.textContent = `Showing ${number(start + 1)}–${number(end)} of ${scope} red-word piles${query ? ` (${number(groups.length)} total)` : ""}.`;
+    const kind = collapsed ? "collapsed virtual cards" : "red-word bigram piles";
+    elements.deckSummary.textContent = `Showing ${number(start + 1)}–${number(end)} of ${scope} ${kind}${query ? ` (${number(cards.length)} total)` : ""}.`;
   } else {
-    elements.deckSummary.textContent = `0 of ${number(groups.length)} red-word piles.`;
+    const kind = collapsed ? "collapsed virtual cards" : "red-word bigram piles";
+    elements.deckSummary.textContent = `0 of ${number(cards.length)} ${kind}.`;
   }
   elements.deckPageStatus.textContent = `Page ${number(deckPage)} of ${number(pageCount)}`;
   elements.deckPrevious.disabled = deckPage <= 1;
@@ -612,6 +620,11 @@ elements.dropZone.addEventListener("drop", (event) => loadFile(event.dataTransfe
 elements.modelDropZone.addEventListener("drop", (event) => loadSavedModel(event.dataTransfer.files[0]));
 
 elements.cardSearch.addEventListener("input", () => {
+  deckPage = 1;
+  renderDeck();
+});
+
+elements.cardView.addEventListener("change", () => {
   deckPage = 1;
   renderDeck();
 });
