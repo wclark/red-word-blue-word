@@ -1,7 +1,6 @@
 import { BOUNDARY, buildModel, generateSentences, groupCards } from "./model.js";
 
 const SAMPLE_TEXT = `The red kite climbs above the quiet park. The quiet park wakes under morning light. Morning light warms the red kite. A bluebird circles above the park. The bluebird sings and the kite climbs. Small patterns can make surprising stories.`;
-const EXAMPLE_URL = "https://www.gutenberg.org/cache/epub/11/pg11.txt";
 const MAX_SOURCE_CHARACTERS = 750_000;
 const MAX_VISIBLE_PILES = 80;
 
@@ -12,7 +11,7 @@ const elements = {
   urlInput: document.querySelector("#source-url"),
   urlSubmit: document.querySelector("#url-submit"),
   readerFallback: document.querySelector("#reader-fallback"),
-  tryExample: document.querySelector("#try-example"),
+  sampleUrls: [...document.querySelectorAll("[data-example-url]")],
   pasteForm: document.querySelector("#paste-form"),
   sourceText: document.querySelector("#source-text"),
   characterCount: document.querySelector("#character-count"),
@@ -392,10 +391,11 @@ elements.urlForm.addEventListener("submit", async (event) => {
   }
 });
 
-elements.tryExample.addEventListener("click", () => {
-  elements.urlInput.value = EXAMPLE_URL;
+elements.sampleUrls.forEach((button) => button.addEventListener("click", () => {
+  elements.urlInput.value = new URL(button.dataset.exampleUrl, document.baseURI).href;
+  if (button.dataset.requiresReader === "true") elements.readerFallback.checked = true;
   elements.urlForm.requestSubmit();
-});
+}));
 
 elements.fileInput.addEventListener("change", () => loadFile(elements.fileInput.files[0]));
 

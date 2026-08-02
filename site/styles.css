@@ -351,7 +351,14 @@ input::placeholder, textarea::placeholder { color: #8c8579; }
 
 .check-label { display: inline-flex; gap: 0.55rem; align-items: flex-start; font-size: 0.92rem; }
 .check-label input { margin-top: 0.28rem; accent-color: var(--red); }
-.inline-button { padding: 0; color: var(--blue-dark); background: none; border: 0; text-decoration: underline; font-weight: 800; cursor: pointer; }
+.sample-urls { margin-top: 1.2rem; padding-top: 1.1rem; border-top: 1px solid var(--line); }
+.sample-urls > p { margin-bottom: 0.65rem; color: var(--muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+.sample-url-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+.sample-url-grid button { padding: 0.7rem 0.8rem; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 7px; text-align: left; cursor: pointer; }
+.sample-url-grid button:hover { background: var(--blue-wash); border-color: #99bde9; }
+.sample-url-grid strong, .sample-url-grid small { display: block; }
+.sample-url-grid strong { font-size: 0.82rem; }
+.sample-url-grid small { margin-top: 0.2rem; overflow-wrap: anywhere; color: var(--muted); font: 650 0.68rem/1.3 ui-monospace, Consolas, monospace; }
 .fine-print { margin: 0.8rem 0 0; color: var(--muted); font-size: 0.82rem; }
 .form-footer span { color: var(--muted); font-size: 0.88rem; }
 
@@ -574,6 +581,7 @@ footer p { margin: 0; }
   .tab { white-space: nowrap; }
   .input-action-row { grid-template-columns: 1fr; }
   .url-options, .form-footer { align-items: flex-start; flex-direction: column; }
+  .sample-url-grid { grid-template-columns: 1fr; }
   .form-footer .button { width: 100%; }
   .stats { grid-template-columns: 1fr 1fr; }
   .stats div { padding: 1rem; }
