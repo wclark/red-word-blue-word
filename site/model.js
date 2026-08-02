@@ -277,7 +277,15 @@ export function generateSentence(model, options = {}) {
   } = options;
 
   if (!model?.cards?.length || !model.transitions?.has(BOUNDARY)) {
-    return { text: "", words: [], cards: [], steps: [], completed: false, reason: "empty" };
+    return {
+      text: "",
+      words: [],
+      cards: [],
+      steps: [],
+      gardenPathCards: [],
+      completed: false,
+      reason: "empty",
+    };
   }
 
   const remaining = withReplacement
@@ -331,6 +339,7 @@ export function generateSentence(model, options = {}) {
     words,
     cards: usedCards,
     steps,
+    gardenPathCards: buildGeneratedGardenPathCards(model, usedCards, steps),
     completed,
     reason,
   };
@@ -352,8 +361,9 @@ function blueWordCounts(cards = []) {
 function compareCardRows(a, b, sortBy) {
   if (a.red === BOUNDARY && b.red !== BOUNDARY) return -1;
   if (b.red === BOUNDARY && a.red !== BOUNDARY) return 1;
-  const alphabetical = a.red.localeCompare(b.red) ||
-    (a.bluePath ?? []).join(" ").localeCompare((b.bluePath ?? []).join(" "));
+  const aPath = [...(a.blackWords ?? []), a.blue].join(" ");
+  const bPath = [...(b.blackWords ?? []), b.blue].join(" ");
+  const alphabetical = a.red.localeCompare(b.red) || aPath.localeCompare(bPath);
   if (sortBy === "alphabetical-desc") return -alphabetical;
   if (sortBy === "frequency-desc") return b.count - a.count || b.total - a.total || alphabetical;
   if (sortBy === "frequency-asc") return a.count - b.count || a.total - b.total || alphabetical;
@@ -363,7 +373,7 @@ function compareCardRows(a, b, sortBy) {
   return alphabetical;
 }
 
-function collapsedAnchorWords(model) {
+function gardenPathJunctures(model) {
   const choiceWords = new Map(
     [...model.transitions].map(([red, cards]) => [
       red,
@@ -401,10 +411,10 @@ function collapsedAnchorWords(model) {
   return { anchors, choiceWords };
 }
 
-export function collapseCards(model, options = {}) {
+export function gardenPathCards(model, options = {}) {
   const sortBy = typeof options === "string" ? options : options.sortBy ?? "alphabetical";
   if (!model?.transitions?.size) return [];
-  const { anchors, choiceWords } = collapsedAnchorWords(model);
+  const { anchors, choiceWords } = gardenPathJunctures(model);
   const rows = [];
 
   anchors.forEach((red) => {
@@ -413,7 +423,7 @@ export function collapseCards(model, options = {}) {
     const choices = blueWordCounts(sourceCards);
 
     choices.forEach(({ blue, count }) => {
-      const bluePath = [blue];
+      const pathWords = [blue];
       let nextRed = blue;
       let safety = model.transitions.size + 1;
 
@@ -424,23 +434,72 @@ export function collapseCards(model, options = {}) {
         choiceWords.get(nextRed)?.length === 1
       ) {
         nextRed = choiceWords.get(nextRed)[0];
-        bluePath.push(nextRed);
+        pathWords.push(nextRed);
         safety -= 1;
       }
 
+      const finalBlue = pathWords.at(-1);
+      const blackWords = pathWords.slice(0, -1);
+
       rows.push({
         red,
-        bluePath,
-        finalBlue: bluePath.at(-1),
+        blackWords,
+        blue: finalBlue,
+        firstWord: pathWords[0],
         count,
         total: sourceCards.length,
         choiceCount: choices.length,
-        sourceSequence: [red, ...bluePath].filter((word) => word !== BOUNDARY),
+        bigramCount: pathWords.length,
+        sourceSequence: [red, ...pathWords].filter((word) => word !== BOUNDARY),
       });
     });
   });
 
   return rows.sort((a, b) => compareCardRows(a, b, sortBy));
+}
+
+function gardenPathKey(red, firstWord) {
+  return JSON.stringify([red, firstWord]);
+}
+
+function buildGeneratedGardenPathCards(model, usedCards, steps) {
+  if (!usedCards.length) return [];
+  const { anchors } = gardenPathJunctures(model);
+  const templates = new Map(
+    gardenPathCards(model).map((card) => [gardenPathKey(card.red, card.firstWord), card])
+  );
+  const generated = [];
+  let segmentStart = 0;
+
+  usedCards.forEach((card, cardIndex) => {
+    const lastCard = cardIndex === usedCards.length - 1;
+    const reachedJuncture = card.blue === BOUNDARY || anchors.has(card.blue);
+    if (!lastCard && !reachedJuncture) return;
+
+    const underlyingCards = usedCards.slice(segmentStart, cardIndex + 1);
+    const pathWords = underlyingCards.map(({ blue }) => blue);
+    const firstStep = steps[segmentStart];
+    const options = (firstStep?.options ?? []).map(({ blue: firstWord, count }) => {
+      const template = templates.get(gardenPathKey(underlyingCards[0].red, firstWord));
+      return template
+        ? { firstWord, blackWords: [...template.blackWords], blue: template.blue, count }
+        : { firstWord, blackWords: [], blue: firstWord, count };
+    });
+
+    generated.push({
+      red: underlyingCards[0].red,
+      blackWords: pathWords.slice(0, -1),
+      blue: pathWords.at(-1),
+      firstWord: pathWords[0],
+      options,
+      choiceCount: options.length,
+      underlyingCards,
+      reachedJuncture,
+    });
+    segmentStart = cardIndex + 1;
+  });
+
+  return generated;
 }
 
 export function groupCards(model, options = {}) {

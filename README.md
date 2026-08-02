@@ -7,10 +7,10 @@ following each blue word to the matching red-word pile.
 The app is deliberately transparent: students can inspect the cards, compare
 sampling with and without replacement, generate several sentences at once, see
 exactly which cards produced each sentence, and inspect import/model diagnostics.
-The default deck collapses deterministic paths into a smaller set of virtual
-cards. Each has exactly one red word; its blue side can contain several words,
-but only the final word is blue because that is the word that points to the next
-card. An alternate view exposes every underlying bigram pile. Both views can be
+The default deck collapses deterministic runs into a smaller set of garden-path
+cards. Each has exactly one red starting word, zero or more black words that are
+automatic after the first choice, and one final blue word naming the next red
+word or boundary. An alternate view exposes every underlying bigram pile. Both views can be
 sorted, searched, and paged, and red words can be clicked to remove that word
 from both sides of every card. Longer fixed runs can be removed from the source
 token stream before the bigrams are rebuilt, without globally deleting their
@@ -20,8 +20,9 @@ It is a bigram/Markov model, not a neural language model.
 The default workflow moves through Source, Model, Generate, and Learn screens,
 so imported text is inspected before generation. Cleaned models can be downloaded
 as `.rwbw.json` files and loaded again later with word and sequence pruning intact.
-Generation results expose complete bigram chains and
-per-step choice data for the planned slot-machine renderer described in
+Generation results show the complete sentence as a juncture-to-juncture chain
+of garden-path cards while retaining the underlying bigrams for diagnostics.
+They also expose whole-card choice data for the planned slot-machine renderer described in
 [`docs/slot-machine-generation.md`](docs/slot-machine-generation.md).
 
 ## What it can read

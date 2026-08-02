@@ -155,7 +155,7 @@
           <p class="step-kicker"><span>03</span> Follow the chain</p>
           <div>
             <h2 id="generator-title">Generate new sentences</h2>
-            <p>Run several paths at once. Every sentence keeps its complete bigram chain visible.</p>
+            <p>Run several paths at once. Each result shows the garden-path cards followed from one red-word juncture to the next.</p>
           </div>
         </div>
 
@@ -202,8 +202,8 @@
         <div class="section-heading">
           <p class="step-kicker"><span>02</span> Clean the model</p>
           <div>
-            <h2 id="deck-title">Explore the virtual cards</h2>
-            <p>Each card starts with one red word. Predetermined words stay neutral on the blue side; only the final word is blue and points to the next card.</p>
+            <h2 id="deck-title">Explore the garden-path cards</h2>
+            <p>Each card has one red word, zero or more automatic black words, and one final blue word naming the next red-word juncture.</p>
           </div>
         </div>
 
@@ -271,7 +271,7 @@
           <div class="deck-view-controls">
             <label for="card-view">Card view
               <select id="card-view">
-                <option value="collapsed" selected>Collapsed paths</option>
+                <option value="garden-paths" selected>Garden-path cards</option>
                 <option value="bigrams">All bigram piles</option>
               </select>
             </label>
@@ -298,7 +298,7 @@
         <div class="card-piles" id="card-piles"></div>
         <div class="deck-footer">
           <p class="deck-summary" id="deck-summary" aria-live="polite"></p>
-          <nav class="deck-pagination" aria-label="Virtual card pages">
+          <nav class="deck-pagination" aria-label="Garden-path card pages">
             <button type="button" id="deck-previous">Previous</button>
             <span id="deck-page-status">Page 1 of 1</span>
             <button type="button" id="deck-next">Next</button>

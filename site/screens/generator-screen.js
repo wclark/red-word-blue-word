@@ -9,27 +9,39 @@ function displayWord(word) {
 }
 
 function renderTrail(container, result, sentenceIndex) {
-  result.cards.forEach(({ red, blue }, cardIndex) => {
+  result.gardenPathCards.forEach(({ red, blackWords, blue, choiceCount, underlyingCards }) => {
     const card = document.createElement("span");
-    card.className = "mini-card";
-    const step = result.steps[cardIndex];
-    const optionCount = step?.options.length ?? 0;
-    card.title = optionCount === 1
-      ? "The only available blue word at this step"
-      : `Chosen from ${number(optionCount)} available blue words at this step`;
+    card.className = "mini-card garden-path-mini-card";
+    card.title = choiceCount === 1
+      ? `The only garden-path card at this red word; ${number(underlyingCards.length)} bigram${underlyingCards.length === 1 ? "" : "s"} underneath`
+      : `Chosen from ${number(choiceCount)} garden-path cards at this red-word juncture; ${number(underlyingCards.length)} bigrams underneath`;
+    card.setAttribute(
+      "aria-label",
+      `${displayWord(red)} in red; ${blackWords.length ? `${blackWords.join(" ")} in black; ` : ""}${displayWord(blue)} in blue`
+    );
 
     const redWord = document.createElement("span");
-    redWord.className = "red-ink";
+    redWord.className = "garden-mini-red";
     redWord.textContent = displayWord(red);
     const arrow = document.createElement("span");
+    arrow.className = "garden-mini-arrow";
     arrow.textContent = "→";
+    const path = document.createElement("span");
+    path.className = "garden-mini-path";
+    blackWords.forEach((word) => {
+      const blackWord = document.createElement("span");
+      blackWord.className = "garden-mini-black";
+      blackWord.textContent = word;
+      path.append(blackWord);
+    });
     const blueWord = document.createElement("span");
-    blueWord.className = "blue-ink";
+    blueWord.className = "garden-mini-blue";
     blueWord.textContent = displayWord(blue);
-    card.append(redWord, arrow, blueWord);
+    path.append(blueWord);
+    card.append(redWord, arrow, path);
     container.append(card);
   });
-  container.setAttribute("aria-label", `Complete bigram chain for sentence ${sentenceIndex + 1}`);
+  container.setAttribute("aria-label", `Complete garden-path card chain for sentence ${sentenceIndex + 1}`);
 }
 
 function renderGeneratedResult(result, index) {
@@ -50,9 +62,9 @@ function renderGeneratedResult(result, index) {
   const pathHeading = document.createElement("div");
   pathHeading.className = "path-heading";
   const pathLabel = document.createElement("strong");
-  pathLabel.textContent = "Bigram chain";
+  pathLabel.textContent = "Garden-path chain";
   const pathCount = document.createElement("span");
-  pathCount.textContent = `${number(result.cards.length)} card${result.cards.length === 1 ? "" : "s"}`;
+  pathCount.textContent = `${number(result.gardenPathCards.length)} garden card${result.gardenPathCards.length === 1 ? "" : "s"} · ${number(result.cards.length)} bigram${result.cards.length === 1 ? "" : "s"} underneath`;
   pathHeading.append(pathLabel, pathCount);
   const trail = document.createElement("div");
   trail.className = "chain-trail";
@@ -105,7 +117,7 @@ export function createGeneratorScreen({ getModel }) {
     if (limited) notes.push(`${number(limited)} hit the word limit`);
     if (deadEnds) notes.push(`${number(deadEnds)} ran out of an available card`);
     if (emptyPaths) notes.push(`${number(emptyPaths)} could not start from X`);
-    elements.generationNote.textContent = `${notes.join(" · ")}. Every complete bigram chain is shown below its sentence.`;
+    elements.generationNote.textContent = `${notes.join(" · ")}. Garden-path cards skip automatic black-word steps and land on the next blue-word juncture.`;
   }
 
   elements.form.addEventListener("submit", (event) => {
