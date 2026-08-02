@@ -33,17 +33,21 @@ export function tokenize(text) {
 }
 
 export function buildModel(text) {
-  const sentences = splitSentences(text);
+  const normalized = normalizeText(text);
+  const sentences = splitSentences(normalized);
+  const sentenceWords = sentences.map((sentence) => tokenize(sentence));
   const cards = [];
   const transitions = new Map();
   const vocabulary = new Set();
   const uniquePairs = new Set();
+  const pairCounts = new Map();
+  const allWords = [];
   let wordCount = 0;
 
-  sentences.forEach((sentence, sentenceIndex) => {
-    const words = tokenize(sentence);
+  sentenceWords.forEach((words, sentenceIndex) => {
     wordCount += words.length;
     words.forEach((word) => vocabulary.add(word));
+    allWords.push(...words);
 
     const sequence = [BOUNDARY, ...words, BOUNDARY];
     for (let index = 0; index < sequence.length - 1; index += 1) {
@@ -54,11 +58,24 @@ export function buildModel(text) {
         sentenceIndex,
       };
       cards.push(card);
-      uniquePairs.add(JSON.stringify([card.red, card.blue]));
+      const pairKey = JSON.stringify([card.red, card.blue]);
+      uniquePairs.add(pairKey);
+      pairCounts.set(pairKey, {
+        red: card.red,
+        blue: card.blue,
+        count: (pairCounts.get(pairKey)?.count ?? 0) + 1,
+      });
       if (!transitions.has(card.red)) transitions.set(card.red, []);
       transitions.get(card.red).push(card);
     }
   });
+
+  const nextWordCounts = [...transitions.values()].map(
+    (outgoingCards) => new Set(outgoingCards.map(({ blue }) => blue)).size
+  );
+  const duplicateCardCount = cards.length - uniquePairs.size;
+  const startCardCount = transitions.get(BOUNDARY)?.length ?? 0;
+  const endCardCount = cards.filter(({ blue }) => blue === BOUNDARY).length;
 
   return {
     cards,
@@ -69,6 +86,28 @@ export function buildModel(text) {
       uniquePairCount: uniquePairs.size,
       sentenceCount: sentences.length,
       vocabularyCount: vocabulary.size,
+    },
+    diagnostics: {
+      characterCount: normalized.length,
+      duplicateCardCount,
+      duplicateCardRate: cards.length ? duplicateCardCount / cards.length : 0,
+      redPileCount: transitions.size,
+      branchingPileCount: nextWordCounts.filter((count) => count > 1).length,
+      averageNextWordsPerPile: nextWordCounts.length
+        ? nextWordCounts.reduce((sum, count) => sum + count, 0) / nextWordCounts.length
+        : 0,
+      widestPileNextWordCount: nextWordCounts.length ? Math.max(...nextWordCounts) : 0,
+      averageSentenceLength: sentences.length ? wordCount / sentences.length : 0,
+      longestSentenceLength: sentenceWords.length
+        ? Math.max(...sentenceWords.map((words) => words.length))
+        : 0,
+      startCardCount,
+      endCardCount,
+      topPairs: [...pairCounts.values()]
+        .sort((a, b) => b.count - a.count || a.red.localeCompare(b.red) || a.blue.localeCompare(b.blue))
+        .slice(0, 10),
+      firstTokens: allWords.slice(0, 18),
+      lastTokens: allWords.slice(-18),
     },
   };
 }
@@ -138,6 +177,11 @@ export function generateSentence(model, options = {}) {
   };
 }
 
+export function generateSentences(model, count, options = {}) {
+  const sentenceCount = Math.max(1, Math.min(50, Math.floor(Number(count) || 1)));
+  return Array.from({ length: sentenceCount }, () => generateSentence(model, options));
+}
+
 export function groupCards(model) {
   return [...model.transitions.entries()]
     .map(([red, cards]) => {
@@ -157,4 +201,3 @@ export function groupCards(model) {
       return a.red.localeCompare(b.red);
     });
 }
-
