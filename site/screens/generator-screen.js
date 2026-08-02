@@ -41,7 +41,43 @@ function renderTrail(container, result, sentenceIndex) {
     card.append(redWord, arrow, path);
     container.append(card);
   });
-  container.setAttribute("aria-label", `Complete garden-path card chain for sentence ${sentenceIndex + 1}`);
+
+  if (result.partialGardenPath) {
+    const { red, words, underlyingCards } = result.partialGardenPath;
+    const partial = document.createElement("span");
+    partial.className = "mini-card garden-path-mini-card is-partial";
+    partial.title = "Generation stopped before this deterministic path reached its next blue-word juncture.";
+    partial.setAttribute(
+      "aria-label",
+      `${displayWord(red)} in red; ${words.length ? `${words.join(" ")} in an incomplete path; ` : ""}stopped before the next blue word`
+    );
+
+    const redWord = document.createElement("span");
+    redWord.className = "garden-mini-red";
+    redWord.textContent = displayWord(red);
+    const arrow = document.createElement("span");
+    arrow.className = "garden-mini-arrow";
+    arrow.textContent = "→";
+    const path = document.createElement("span");
+    path.className = "garden-mini-path";
+    words.forEach((word) => {
+      const blackWord = document.createElement("span");
+      blackWord.className = "garden-mini-black";
+      blackWord.textContent = displayWord(word);
+      path.append(blackWord);
+    });
+    const stop = document.createElement("span");
+    stop.className = "garden-mini-stop";
+    stop.textContent = "…";
+    stop.title = `${number(underlyingCards.length)} bigram${underlyingCards.length === 1 ? "" : "s"} before the cutoff`;
+    path.append(stop);
+    partial.append(redWord, arrow, path);
+    container.append(partial);
+  }
+  container.setAttribute(
+    "aria-label",
+    `${result.partialGardenPath ? "Garden-path chain with a partial ending" : "Complete garden-path card chain"} for sentence ${sentenceIndex + 1}`
+  );
 }
 
 function renderGeneratedResult(result, index) {
@@ -64,7 +100,11 @@ function renderGeneratedResult(result, index) {
   const pathLabel = document.createElement("strong");
   pathLabel.textContent = "Garden-path chain";
   const pathCount = document.createElement("span");
-  pathCount.textContent = `${number(result.gardenPathCards.length)} garden card${result.gardenPathCards.length === 1 ? "" : "s"} · ${number(result.cards.length)} bigram${result.cards.length === 1 ? "" : "s"} underneath`;
+  const gardenBigramCount = result.gardenPathCards.reduce(
+    (total, card) => total + card.underlyingCards.length,
+    0
+  ) + (result.partialGardenPath?.underlyingCards.length ?? 0);
+  pathCount.textContent = `${number(result.gardenPathCards.length)} garden card${result.gardenPathCards.length === 1 ? "" : "s"} · ${number(gardenBigramCount)} bigram${gardenBigramCount === 1 ? "" : "s"} inside${result.partialGardenPath ? " · partial path" : ""}`;
   pathHeading.append(pathLabel, pathCount);
   const trail = document.createElement("div");
   trail.className = "chain-trail";

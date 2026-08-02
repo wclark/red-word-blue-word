@@ -10,12 +10,21 @@ exactly which cards produced each sentence, and inspect import/model diagnostics
 The default deck collapses deterministic runs into a smaller set of garden-path
 cards. Each has exactly one red starting word, zero or more black words that are
 automatic after the first choice, and one final blue word naming the next red
-word or boundary. An alternate view exposes every underlying bigram pile. Both views can be
-sorted, searched, and paged, and red words can be clicked to remove that word
-from both sides of every card. Longer fixed runs can be removed from the source
-token stream before the bigrams are rebuilt, without globally deleting their
-individual words. All removals can be restored without re-importing the source.
-It is a bigram/Markov model, not a neural language model.
+word or boundary. An alternate view exposes every underlying bigram pile. Both
+views can be sorted, searched, and paged. Garden-path cards can also be filtered
+by starting-word status, the final blue word, black and total word counts,
+choices at the red word, and occurrence frequency. Red words can be clicked to
+remove that word from both sides of every card. Longer fixed runs can be removed
+from the source token stream before the bigrams are rebuilt, without globally
+deleting their individual words. All removals can be restored without
+re-importing the source. It is a bigram/Markov model, not a neural language
+model.
+
+X still supplies the weighted choice of sentence-starting words, but the first
+visible garden-path card begins with that selected word in red. The raw
+bigram-pile view retains the X pile for inspection.
+The final-blue filter distinguishes a continuing red card, the X boundary, and
+a dead end exposed by pruning.
 
 The default workflow moves through Source, Model, Generate, and Learn screens,
 so imported text is inspected before generation. Cleaned models can be downloaded

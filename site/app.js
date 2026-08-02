@@ -3,6 +3,7 @@ import {
   buildModel,
   createModelSnapshot,
   filterModel,
+  filterGardenPathCards,
   gardenPathCards,
   groupCards,
   loadModelSnapshot,
@@ -53,6 +54,19 @@ const elements = {
   cardView: document.querySelector("#card-view"),
   cardSort: document.querySelector("#card-sort"),
   cardPageSize: document.querySelector("#card-page-size"),
+  deckFilters: document.querySelector("#deck-filters"),
+  cardFilterStatus: document.querySelector("#card-filter-status"),
+  startingWordFilter: document.querySelector("#starting-word-filter"),
+  finalBlueFilter: document.querySelector("#final-blue-filter"),
+  blackWordsMin: document.querySelector("#black-words-min"),
+  blackWordsMax: document.querySelector("#black-words-max"),
+  totalWordsMin: document.querySelector("#total-words-min"),
+  totalWordsMax: document.querySelector("#total-words-max"),
+  choicesMin: document.querySelector("#choices-min"),
+  choicesMax: document.querySelector("#choices-max"),
+  frequencyMin: document.querySelector("#frequency-min"),
+  frequencyMax: document.querySelector("#frequency-max"),
+  clearCardFilters: document.querySelector("#clear-card-filters"),
   cardPiles: document.querySelector("#card-piles"),
   deckSummary: document.querySelector("#deck-summary"),
   deckPrevious: document.querySelector("#deck-previous"),
@@ -253,13 +267,67 @@ function restoreRemovedWords() {
   showStatus("All removed words, sequences, and cards have been restored.", "ready");
 }
 
+function optionalNumber(input) {
+  return input.value === "" ? null : Number(input.value);
+}
+
+function currentGardenFilters() {
+  return {
+    startingWord: elements.startingWordFilter.value,
+    finalBlue: elements.finalBlueFilter.value,
+    blackWordsMin: optionalNumber(elements.blackWordsMin),
+    blackWordsMax: optionalNumber(elements.blackWordsMax),
+    totalWordsMin: optionalNumber(elements.totalWordsMin),
+    totalWordsMax: optionalNumber(elements.totalWordsMax),
+    choicesMin: optionalNumber(elements.choicesMin),
+    choicesMax: optionalNumber(elements.choicesMax),
+    frequencyMin: optionalNumber(elements.frequencyMin),
+    frequencyMax: optionalNumber(elements.frequencyMax),
+  };
+}
+
+function activeGardenFilterCount(filters) {
+  return [
+    filters.startingWord !== "any",
+    filters.finalBlue !== "any",
+    filters.blackWordsMin !== null || filters.blackWordsMax !== null,
+    filters.totalWordsMin !== null || filters.totalWordsMax !== null,
+    filters.choicesMin !== null || filters.choicesMax !== null,
+    filters.frequencyMin !== null || filters.frequencyMax !== null,
+  ].filter(Boolean).length;
+}
+
+function resetGardenFilters() {
+  elements.startingWordFilter.value = "any";
+  elements.finalBlueFilter.value = "any";
+  [
+    elements.blackWordsMin,
+    elements.blackWordsMax,
+    elements.totalWordsMin,
+    elements.totalWordsMax,
+    elements.choicesMin,
+    elements.choicesMax,
+    elements.frequencyMin,
+    elements.frequencyMax,
+  ].forEach((input) => { input.value = ""; });
+  elements.deckFilters.open = false;
+}
+
 function renderDeck() {
   const query = elements.cardSearch.value.trim().toLocaleLowerCase("en-US");
   const gardenView = elements.cardView.value === "garden-paths";
   const cards = gardenView
     ? gardenPathCards(currentModel, { sortBy: elements.cardSort.value })
     : groupCards(currentModel, { sortBy: elements.cardSort.value });
-  const matching = cards.filter(({ red }) => !query || red.toLocaleLowerCase("en-US").includes(query));
+  const filters = currentGardenFilters();
+  const activeFilterCount = gardenView ? activeGardenFilterCount(filters) : 0;
+  const filteredCards = gardenView ? filterGardenPathCards(cards, filters) : cards;
+  const matching = filteredCards.filter(({ red }) => !query || red.toLocaleLowerCase("en-US").includes(query));
+  elements.deckFilters.hidden = !gardenView;
+  elements.clearCardFilters.disabled = activeFilterCount === 0;
+  elements.cardFilterStatus.textContent = activeFilterCount
+    ? `${number(activeFilterCount)} active · ${number(filteredCards.length)} of ${number(cards.length)} cards`
+    : `${number(cards.length)} cards · 1 red + any number of black + 1 blue`;
   const pageSize = Number(elements.cardPageSize.value);
   const pageCount = Math.max(1, Math.ceil(matching.length / pageSize));
   deckPage = Math.min(Math.max(1, deckPage), pageCount);
@@ -283,7 +351,11 @@ function renderDeck() {
       redSide.addEventListener("click", () => removeWordFromModel(card.red));
     }
     const redLabel = document.createElement("span");
-    redLabel.textContent = card.red === BOUNDARY ? "protected boundary" : "click to remove";
+    redLabel.textContent = card.red === BOUNDARY
+      ? "protected boundary"
+      : gardenView && card.isStartingWord
+        ? "starting word · click to remove"
+        : "click to remove";
     const redWord = document.createElement("strong");
     redWord.textContent = displayWord(card.red);
     const redMeta = document.createElement("small");
@@ -306,7 +378,11 @@ function renderDeck() {
       phrase.className = "garden-path-words";
       phrase.setAttribute(
         "aria-label",
-        `Garden path: ${card.blackWords.length ? `${card.blackWords.join(" ")}, then ` : ""}${displayWord(card.blue)} in blue; next red word ${displayWord(card.blue)}`
+        card.endsSentence
+          ? `Garden path: ${card.blackWords.length ? `${card.blackWords.join(" ")}, then ` : ""}X in blue; ends the sentence`
+          : card.isDeadEnd
+            ? `Garden path: ${card.blackWords.length ? `${card.blackWords.join(" ")}, then ` : ""}${displayWord(card.blue)} in blue; no red card starts with ${displayWord(card.blue)}`
+            : `Garden path: ${card.blackWords.length ? `${card.blackWords.join(" ")}, then ` : ""}${displayWord(card.blue)} in blue; next red word ${displayWord(card.blue)}`
       );
       card.blackWords.forEach((word) => {
         const token = document.createElement("span");
@@ -316,7 +392,11 @@ function renderDeck() {
       });
       const blueToken = document.createElement("span");
       blueToken.className = "garden-path-word garden-path-blue";
-      blueToken.textContent = card.blue === BOUNDARY ? "X · end" : card.blue;
+      blueToken.textContent = card.endsSentence
+        ? "X · end"
+        : card.isDeadEnd
+          ? `${card.blue} · dead end`
+          : card.blue;
       phrase.append(blueToken);
       blueSide.append(phrase);
 
@@ -372,20 +452,29 @@ function renderDeck() {
   if (!visible.length) {
     const empty = document.createElement("p");
     empty.className = "empty-deck";
-    empty.textContent = query
-      ? `No red word matches “${elements.cardSearch.value.trim()}”.`
-      : "No garden-path cards remain in this model.";
+    empty.textContent = query && activeFilterCount
+      ? "No cards match the current search and filters."
+      : query
+        ? `No red word matches “${elements.cardSearch.value.trim()}”.`
+        : activeFilterCount
+          ? "No garden-path cards match the active filters."
+          : gardenView
+            ? "No garden-path cards remain in this model."
+            : "No red-word bigram piles remain in this model.";
     elements.cardPiles.append(empty);
   }
 
   if (matching.length) {
     const end = start + visible.length;
-    const scope = query ? `${number(matching.length)} matching` : number(matching.length);
+    const constrained = Boolean(query) || activeFilterCount > 0;
+    const scope = constrained ? `${number(matching.length)} matching` : number(matching.length);
     const kind = gardenView ? "garden-path cards" : "red-word bigram piles";
-    elements.deckSummary.textContent = `Showing ${number(start + 1)}–${number(end)} of ${scope} ${kind}${query ? ` (${number(cards.length)} total)` : ""}.`;
+    elements.deckSummary.textContent = `Showing ${number(start + 1)}–${number(end)} of ${scope} ${kind}${constrained ? ` (${number(cards.length)} total)` : ""}.`;
   } else {
     const kind = gardenView ? "garden-path cards" : "red-word bigram piles";
-    elements.deckSummary.textContent = `0 of ${number(cards.length)} ${kind}.`;
+    elements.deckSummary.textContent = query || activeFilterCount
+      ? `0 matching ${kind} (${number(cards.length)} total).`
+      : `0 of ${number(cards.length)} ${kind}.`;
   }
   elements.deckPageStatus.textContent = `Page ${number(deckPage)} of ${number(pageCount)}`;
   elements.deckPrevious.disabled = deckPage <= 1;
@@ -403,6 +492,7 @@ function installModel(nextSourceModel, nextCurrentModel, sourceLabel) {
   deckPage = 1;
   elements.sourceName.textContent = sourceLabel;
   elements.cardSearch.value = "";
+  resetGardenFilters();
   updateStats();
   renderDeck();
   renderModelEdits();
@@ -628,6 +718,35 @@ elements.cardSearch.addEventListener("input", () => {
 });
 
 elements.cardView.addEventListener("change", () => {
+  deckPage = 1;
+  renderDeck();
+});
+
+[elements.startingWordFilter, elements.finalBlueFilter].forEach((select) => {
+  select.addEventListener("change", () => {
+    deckPage = 1;
+    renderDeck();
+  });
+});
+
+[
+  elements.blackWordsMin,
+  elements.blackWordsMax,
+  elements.totalWordsMin,
+  elements.totalWordsMax,
+  elements.choicesMin,
+  elements.choicesMax,
+  elements.frequencyMin,
+  elements.frequencyMax,
+].forEach((input) => {
+  input.addEventListener("input", () => {
+    deckPage = 1;
+    renderDeck();
+  });
+});
+
+elements.clearCardFilters.addEventListener("click", () => {
+  resetGardenFilters();
   deckPage = 1;
   renderDeck();
 });
