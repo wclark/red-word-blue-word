@@ -202,7 +202,7 @@
           <p class="step-kicker"><span>03</span> Look inside</p>
           <div>
             <h2 id="deck-title">Explore the card piles</h2>
-            <p>Every occurrence becomes a card. A number shows when the same pair appears more than once.</p>
+            <p>Every occurrence becomes a card. Click a red word to remove it and every card that references it.</p>
           </div>
         </div>
 
@@ -238,15 +238,48 @@
               </div>
             </div>
           </div>
-          <p class="report-footnote">Counts reflect the normalized tokens shown above. X is included as a red-word pile and as the sentence boundary card.</p>
+          <p class="report-footnote">Card, vocabulary, and token-preview counts reflect the current model after removals; normalized characters describes the imported source. X is included as a protected boundary pile.</p>
         </section>
 
+        <div class="model-edits" id="model-edits" hidden>
+          <p id="model-edit-status" role="status" aria-live="polite"></p>
+          <button class="button button-small" type="button" id="restore-words">Restore all removed words</button>
+        </div>
         <div class="deck-tools">
-          <label for="card-search">Find a red word</label>
-          <input id="card-search" type="search" placeholder="Try “the” or X" autocomplete="off">
+          <div class="deck-search">
+            <label for="card-search">Find a red word</label>
+            <input id="card-search" type="search" placeholder="Try “the” or X" autocomplete="off">
+          </div>
+          <div class="deck-view-controls">
+            <label for="card-sort">Sort piles
+              <select id="card-sort">
+                <option value="alphabetical">A to Z</option>
+                <option value="alphabetical-desc">Z to A</option>
+                <option value="frequency-desc">Most cards</option>
+                <option value="frequency-asc">Fewest cards</option>
+                <option value="branching-desc">Most blue choices</option>
+              </select>
+            </label>
+            <label for="card-page-size">Piles per page
+              <select id="card-page-size">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="250">250</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div class="card-piles" id="card-piles"></div>
-        <p class="deck-summary" id="deck-summary"></p>
+        <div class="deck-footer">
+          <p class="deck-summary" id="deck-summary" aria-live="polite"></p>
+          <nav class="deck-pagination" aria-label="Red-word pile pages">
+            <button type="button" id="deck-previous">Previous</button>
+            <span id="deck-page-status">Page 1 of 1</span>
+            <button type="button" id="deck-next">Next</button>
+          </nav>
+        </div>
       </section>
 
       <section class="explanation section-shell" id="how-it-works" aria-labelledby="how-title">

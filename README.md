@@ -7,7 +7,9 @@ following each blue word to the matching red-word pile.
 The app is deliberately transparent: students can inspect the cards, compare
 sampling with and without replacement, generate several sentences at once, see
 exactly which cards produced each sentence, and inspect import/model diagnostics.
-It is a bigram/Markov model, not a neural language model.
+Red-word piles can be sorted, searched, paged, expanded, or clicked to remove
+that word from both sides of every card; all removals can be restored without
+re-importing the source. It is a bigram/Markov model, not a neural language model.
 
 ## What it can read
 
