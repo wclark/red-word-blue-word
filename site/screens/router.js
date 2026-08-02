@@ -5,6 +5,10 @@ const HASH_ALIASES = {
   "how-it-works": "learn",
 };
 
+function canonicalScreenName(screenName) {
+  return HASH_ALIASES[screenName] ?? screenName;
+}
+
 export function createScreenRouter(options = {}) {
   const screens = new Map(
     [...document.querySelectorAll("[data-app-screen]")].map((screen) => [screen.dataset.appScreen, screen])
@@ -15,8 +19,8 @@ export function createScreenRouter(options = {}) {
 
   function screenFromHash() {
     const requested = decodeURIComponent(window.location.hash.slice(1));
-    if (screens.has(requested)) return requested;
-    return HASH_ALIASES[requested] ?? defaultScreen;
+    const canonical = canonicalScreenName(requested);
+    return screens.has(canonical) ? canonical : defaultScreen;
   }
 
   function show(screenName) {
@@ -42,11 +46,24 @@ export function createScreenRouter(options = {}) {
   }
 
   function navigate(screenName) {
-    if (!screens.has(screenName)) return;
-    const nextHash = `#${screenName}`;
-    if (window.location.hash === nextHash) show(screenName);
+    const nextScreen = canonicalScreenName(screenName);
+    if (!screens.has(nextScreen)) return;
+    const nextHash = `#${nextScreen}`;
+    if (window.location.hash === nextHash) show(nextScreen);
     else window.location.hash = nextHash;
   }
+
+  document.querySelectorAll('a[href^="#"]').forEach((link) => {
+    link.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      const screenName = decodeURIComponent(link.getAttribute("href").slice(1));
+      if (!screens.has(canonicalScreenName(screenName))) return;
+      event.preventDefault();
+      navigate(screenName);
+    });
+  });
 
   window.addEventListener("hashchange", syncFromHash);
   syncFromHash();
