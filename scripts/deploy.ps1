@@ -47,10 +47,11 @@ try {
     Copy-Item -Path (Join-Path $sitePath "*") -Destination $deployPath -Recurse
 
     $indexPath = Join-Path $deployPath "index.html"
-    $index = Get-Content -Raw -LiteralPath $indexPath
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $index = [System.IO.File]::ReadAllText($indexPath, $utf8NoBom)
     $baseTag = '<base href="/' + $Prefix + '/">'
     $index = $index.Replace("<!-- DEPLOY_BASE -->", $baseTag)
-    Set-Content -LiteralPath $indexPath -Value $index -Encoding utf8 -NoNewline
+    [System.IO.File]::WriteAllText($indexPath, $index, $utf8NoBom)
 
     Write-Host "Uploading static assets to s3://$Bucket/$Prefix/"
     & aws s3 sync $deployPath "s3://$Bucket/$Prefix/" `
@@ -88,4 +89,3 @@ finally {
         Remove-Item -LiteralPath $resolvedDeploy -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
-
