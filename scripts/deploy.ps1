@@ -48,11 +48,26 @@ try {
 
     $indexPath = Join-Path $deployPath "index.html"
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $assetVersion = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
     $index = [System.IO.File]::ReadAllText($indexPath, $utf8NoBom)
     $baseTag = '<base href="/' + $Prefix + '/">'
     $index = $index.Replace("<!-- DEPLOY_BASE -->", $baseTag)
     $index = $index.Replace('href="#', ('href="/' + $Prefix + '#'))
+    $index = $index.Replace('href="styles.css"', ('href="styles.css?v=' + $assetVersion + '"'))
+    $index = $index.Replace('src="app.js"', ('src="app.js?v=' + $assetVersion + '"'))
     [System.IO.File]::WriteAllText($indexPath, $index, $utf8NoBom)
+
+    $appPath = Join-Path $deployPath "app.js"
+    $app = [System.IO.File]::ReadAllText($appPath, $utf8NoBom)
+    $app = $app.Replace('from "./model.js"', ('from "./model.js?v=' + $assetVersion + '"'))
+    $app = $app.Replace('from "./screens/generator-screen.js"', ('from "./screens/generator-screen.js?v=' + $assetVersion + '"'))
+    $app = $app.Replace('from "./screens/router.js"', ('from "./screens/router.js?v=' + $assetVersion + '"'))
+    [System.IO.File]::WriteAllText($appPath, $app, $utf8NoBom)
+
+    $generatorPath = Join-Path $deployPath "screens\generator-screen.js"
+    $generator = [System.IO.File]::ReadAllText($generatorPath, $utf8NoBom)
+    $generator = $generator.Replace('from "../model.js"', ('from "../model.js?v=' + $assetVersion + '"'))
+    [System.IO.File]::WriteAllText($generatorPath, $generator, $utf8NoBom)
 
     Write-Host "Uploading static assets to s3://$Bucket/$Prefix/"
     & aws s3 sync $deployPath "s3://$Bucket/$Prefix/" `
