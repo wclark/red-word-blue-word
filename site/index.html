@@ -18,19 +18,25 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <a class="skip-link" href="#studio">Skip to the language lab</a>
+    <a class="skip-link" href="#source">Skip to the language lab</a>
 
     <header class="site-header">
-      <a class="brand" href="#top" aria-label="Red Word, Blue Word home">
+      <a class="brand" href="#source" aria-label="Red Word, Blue Word source screen">
         <span class="brand-cards" aria-hidden="true">
           <span>red</span><span>blue</span>
         </span>
         <span>RWBW Lab</span>
       </a>
-      <a class="text-link" href="#how-it-works">How it works <span aria-hidden="true">↓</span></a>
+      <nav class="screen-nav" aria-label="Lab screens">
+        <a href="#source" data-screen-link="source">Source</a>
+        <a href="#generate" data-screen-link="generate">Generate</a>
+        <a href="#model" data-screen-link="model">Model</a>
+        <a href="#learn" data-screen-link="learn">Learn</a>
+      </nav>
     </header>
 
     <main id="top">
+      <div class="app-screen source-screen" id="source" data-app-screen="source">
       <section class="hero" aria-labelledby="page-title">
         <div class="hero-copy">
           <p class="eyebrow">A tiny language model you can hold in your head</p>
@@ -79,6 +85,7 @@
             <button class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="url-panel" id="url-tab" data-tab="url-panel">From a URL</button>
             <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="paste-panel" id="paste-tab" data-tab="paste-panel">Paste text</button>
             <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="file-panel" id="file-tab" data-tab="file-panel">Open a file</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="model-file-panel" id="model-file-tab" data-tab="model-file-panel">Load saved model</button>
           </div>
 
           <div class="tab-panel" role="tabpanel" id="url-panel" aria-labelledby="url-tab">
@@ -135,6 +142,15 @@
             </label>
           </div>
 
+          <div class="tab-panel" role="tabpanel" id="model-file-panel" aria-labelledby="model-file-tab" hidden>
+            <label class="drop-zone saved-model-zone" for="model-file" id="model-drop-zone">
+              <input id="model-file" type="file" accept=".rwbw.json,.json,application/json">
+              <span class="drop-icon" aria-hidden="true">↥</span>
+              <strong>Open a saved Red Word, Blue Word model</strong>
+              <span>Reload its source text and every word you pruned</span>
+            </label>
+          </div>
+
           <div class="load-status" id="load-status" role="status" aria-live="polite">
             <span class="status-dot" aria-hidden="true"></span>
             <span id="status-text">The example deck is ready.</span>
@@ -148,13 +164,14 @@
           <div><strong id="stat-sentences">0</strong><span>sentence starts</span></div>
         </div>
       </section>
+      </div>
 
-      <section class="generator section-shell" id="generator" aria-labelledby="generator-title">
+      <section class="generator section-shell app-screen" id="generate" data-app-screen="generate" aria-labelledby="generator-title" hidden>
         <div class="section-heading light-heading">
           <p class="step-kicker"><span>02</span> Follow the chain</p>
           <div>
             <h2 id="generator-title">Generate new sentences</h2>
-            <p>Run several paths at once, then open any sentence to inspect the cards it used.</p>
+            <p>Run several paths at once. Every sentence keeps its complete bigram chain visible.</p>
           </div>
         </div>
 
@@ -197,13 +214,21 @@
         </div>
       </section>
 
-      <section class="deck section-shell" id="deck" aria-labelledby="deck-title">
+      <section class="deck section-shell app-screen" id="model" data-app-screen="model" aria-labelledby="deck-title" hidden>
         <div class="section-heading">
           <p class="step-kicker"><span>03</span> Look inside</p>
           <div>
             <h2 id="deck-title">Explore the card piles</h2>
             <p>Every occurrence becomes a card. Click a red word to remove it and every card that references it.</p>
           </div>
+        </div>
+
+        <div class="model-file-actions">
+          <div>
+            <strong>Keep this version of the model</strong>
+            <p>Download the source and pruning list, then load it again from the Source screen.</p>
+          </div>
+          <button class="button button-dark" type="button" id="download-model">Download model</button>
         </div>
 
         <section class="model-report" aria-labelledby="report-title">
@@ -226,7 +251,13 @@
 
           <div class="diagnostic-details">
             <div class="diagnostic-panel">
+              <h4>Most frequent starting words</h4>
+              <p class="diagnostic-caption">The words most often drawn immediately after X.</p>
+              <ol class="top-pairs top-starts" id="top-starts"></ol>
+            </div>
+            <div class="diagnostic-panel">
               <h4>Most frequent bigrams</h4>
+              <p class="diagnostic-caption">Word-to-word pairs, excluding the X boundary cards.</p>
               <ol class="top-pairs" id="top-pairs"></ol>
             </div>
             <div class="diagnostic-panel">
@@ -282,7 +313,7 @@
         </div>
       </section>
 
-      <section class="explanation section-shell" id="how-it-works" aria-labelledby="how-title">
+      <section class="explanation section-shell app-screen" id="learn" data-app-screen="learn" aria-labelledby="how-title" hidden>
         <div class="section-heading">
           <p class="step-kicker"><span>04</span> Name the idea</p>
           <div>
@@ -322,7 +353,7 @@
 
     <footer>
       <p><strong>Red Word, Blue Word</strong> is a transparent classroom experiment.</p>
-      <p>Built with plain HTML, CSS, and JavaScript. No accounts. No saved text.</p>
+      <p>Built with plain HTML, CSS, and JavaScript. No accounts. No server storage.</p>
     </footer>
 
     <script type="module" src="app.js"></script>

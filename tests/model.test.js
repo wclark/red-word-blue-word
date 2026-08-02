@@ -4,10 +4,12 @@ import test from "node:test";
 import {
   BOUNDARY,
   buildModel,
+  createModelSnapshot,
   filterModel,
   generateSentence,
   generateSentences,
   groupCards,
+  loadModelSnapshot,
   tokenize,
 } from "../site/model.js";
 
@@ -74,10 +76,8 @@ test("model diagnostics summarize branching and sentence lengths", () => {
   assert.equal(model.diagnostics.redPileCount, 6);
   assert.equal(model.diagnostics.branchingPileCount, 1);
   assert.equal(model.diagnostics.widestPileNextWordCount, 2);
-  assert.deepEqual(
-    model.diagnostics.topPairs.find(({ red, blue }) => red === "X" && blue === "red"),
-    { red: "X", blue: "red", count: 2 }
-  );
+  assert.deepEqual(model.diagnostics.topStarts[0], { word: "red", count: 2 });
+  assert.ok(model.diagnostics.topPairs.every(({ red, blue }) => red !== BOUNDARY && blue !== BOUNDARY));
 });
 
 test("filterModel removes a word from both sides of every card", () => {
@@ -117,6 +117,32 @@ test("groupCards can sort piles by frequency and branching", () => {
   assert.equal(byBranching[1].blueWords.length, 3);
 });
 
+test("saved model snapshots preserve source and pruning", () => {
+  const source = buildModel("Red fish swim. Blue fish rest!");
+  const filtered = filterModel(source, ["fish"]);
+  const snapshot = createModelSnapshot(filtered, {
+    sourceLabel: "Fish story",
+    savedAt: "2026-08-02T00:00:00.000Z",
+  });
+  const restored = loadModelSnapshot(JSON.stringify(snapshot));
+
+  assert.equal(snapshot.format, "red-word-blue-word-model");
+  assert.equal(restored.sourceLabel, "Fish story");
+  assert.deepEqual(restored.model.removedWords, ["fish"]);
+  assert.deepEqual(
+    restored.model.cards.map(({ red, blue }) => [red, blue]),
+    filtered.cards.map(({ red, blue }) => [red, blue])
+  );
+  assert.equal(restored.sourceModel.stats.cardCount, source.stats.cardCount);
+});
+
+test("loadModelSnapshot rejects unrelated JSON", () => {
+  assert.throws(
+    () => loadModelSnapshot('{"hello":"world"}'),
+    /not a supported Red Word, Blue Word model file/
+  );
+});
+
 test("generation follows a deterministic complete chain", () => {
   const model = buildModel("Bright birds sing.");
   const result = generateSentence(model, { random: () => 0 });
@@ -126,6 +152,13 @@ test("generation follows a deterministic complete chain", () => {
     result.cards.map(({ red, blue }) => [red, blue]),
     [[BOUNDARY, "bright"], ["bright", "birds"], ["birds", "sing"], ["sing", BOUNDARY]]
   );
+  assert.deepEqual(result.steps[0], {
+    red: BOUNDARY,
+    options: [{ blue: "bright", count: 1 }],
+    chosen: "bright",
+    cardId: 0,
+  });
+  assert.equal(result.steps.at(-1).chosen, BOUNDARY);
 });
 
 test("without replacement can exhaust a looping pile", () => {

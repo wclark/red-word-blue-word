@@ -1,4 +1,6 @@
 export const BOUNDARY = "X";
+export const MODEL_SNAPSHOT_FORMAT = "red-word-blue-word-model";
+export const MODEL_SNAPSHOT_VERSION = 1;
 
 const WORD_PATTERN = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
 const PERIOD_SENTINEL = "\uE000";
@@ -84,6 +86,9 @@ function createModel(cards, source, removedWords, baseCards) {
   const duplicateCardCount = cards.length - uniquePairs.size;
   const startCardCount = transitions.get(BOUNDARY)?.length ?? 0;
   const endCardCount = cards.filter(({ blue }) => blue === BOUNDARY).length;
+  const sortedPairs = [...pairCounts.values()].sort(
+    (a, b) => b.count - a.count || a.red.localeCompare(b.red) || a.blue.localeCompare(b.blue)
+  );
 
   return {
     cards,
@@ -116,8 +121,12 @@ function createModel(cards, source, removedWords, baseCards) {
       longestSentenceLength: activeSentenceLengths.length ? Math.max(...activeSentenceLengths) : 0,
       startCardCount,
       endCardCount,
-      topPairs: [...pairCounts.values()]
-        .sort((a, b) => b.count - a.count || a.red.localeCompare(b.red) || a.blue.localeCompare(b.blue))
+      topStarts: sortedPairs
+        .filter(({ red, blue }) => red === BOUNDARY && blue !== BOUNDARY)
+        .map(({ blue, count }) => ({ word: blue, count }))
+        .slice(0, 10),
+      topPairs: sortedPairs
+        .filter(({ red, blue }) => red !== BOUNDARY && blue !== BOUNDARY)
         .slice(0, 10),
       firstTokens: activeWords.slice(0, 18),
       lastTokens: activeWords.slice(-18),
@@ -142,6 +151,54 @@ export function filterModel(model, excludedWords = []) {
   return createModel(cards, model.source, removedWords, model.baseCards);
 }
 
+export function createModelSnapshot(model, options = {}) {
+  if (!model?.source?.normalized) throw new Error("There is no model to save.");
+  return {
+    format: MODEL_SNAPSHOT_FORMAT,
+    version: MODEL_SNAPSHOT_VERSION,
+    savedAt: options.savedAt ?? new Date().toISOString(),
+    source: {
+      label: String(options.sourceLabel ?? "Saved model"),
+      text: model.source.normalized,
+    },
+    pruning: {
+      removedWords: [...(model.removedWords ?? [])],
+    },
+  };
+}
+
+export function loadModelSnapshot(value) {
+  let snapshot;
+  try {
+    snapshot = typeof value === "string" ? JSON.parse(value) : value;
+  } catch {
+    throw new Error("That file is not valid JSON.");
+  }
+
+  if (snapshot?.format !== MODEL_SNAPSHOT_FORMAT || snapshot?.version !== MODEL_SNAPSHOT_VERSION) {
+    throw new Error("That is not a supported Red Word, Blue Word model file.");
+  }
+  if (typeof snapshot.source?.text !== "string" || !snapshot.source.text.trim()) {
+    throw new Error("That model file does not contain source text.");
+  }
+  if (!Array.isArray(snapshot.pruning?.removedWords)) {
+    throw new Error("That model file has invalid pruning data.");
+  }
+
+  const sourceModel = buildModel(snapshot.source.text);
+  if (sourceModel.stats.wordCount < 2) {
+    throw new Error("That model file does not contain enough source words.");
+  }
+  const removedWords = snapshot.pruning.removedWords.filter((word) => typeof word === "string");
+  const model = filterModel(sourceModel, removedWords);
+  return {
+    sourceModel,
+    model,
+    sourceLabel: String(snapshot.source.label || "Saved model"),
+    savedAt: typeof snapshot.savedAt === "string" ? snapshot.savedAt : "",
+  };
+}
+
 function choose(items, random) {
   return items[Math.min(items.length - 1, Math.floor(random() * items.length))];
 }
@@ -160,7 +217,7 @@ export function generateSentence(model, options = {}) {
   } = options;
 
   if (!model?.cards?.length || !model.transitions?.has(BOUNDARY)) {
-    return { text: "", words: [], cards: [], completed: false, reason: "empty" };
+    return { text: "", words: [], cards: [], steps: [], completed: false, reason: "empty" };
   }
 
   const remaining = withReplacement
@@ -169,6 +226,7 @@ export function generateSentence(model, options = {}) {
 
   const words = [];
   const usedCards = [];
+  const steps = [];
   let red = BOUNDARY;
   let completed = false;
   let reason = "maximum";
@@ -182,6 +240,16 @@ export function generateSentence(model, options = {}) {
 
     const card = choose(choices, random);
     usedCards.push(card);
+    const optionCounts = new Map();
+    choices.forEach(({ blue }) => optionCounts.set(blue, (optionCounts.get(blue) ?? 0) + 1));
+    steps.push({
+      red,
+      options: [...optionCounts.entries()]
+        .map(([blue, count]) => ({ blue, count }))
+        .sort((a, b) => b.count - a.count || a.blue.localeCompare(b.blue)),
+      chosen: card.blue,
+      cardId: card.id,
+    });
 
     if (!withReplacement) {
       const index = choices.findIndex(({ id }) => id === card.id);
@@ -202,6 +270,7 @@ export function generateSentence(model, options = {}) {
     text: formatSentence(words, completed),
     words,
     cards: usedCards,
+    steps,
     completed,
     reason,
   };
