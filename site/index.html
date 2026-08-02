@@ -93,7 +93,23 @@
                   <input type="checkbox" id="reader-fallback" checked>
                   <span>Use Jina Reader if the site blocks direct browser access</span>
                 </label>
-                <button class="inline-button" type="button" id="try-example">Try a public-domain text</button>
+              </div>
+              <div class="sample-urls" aria-labelledby="sample-urls-title">
+                <p id="sample-urls-title">Known-good sample URLs</p>
+                <div class="sample-url-grid">
+                  <button type="button" data-example-url="sample.txt">
+                    <strong>Quick built-in sample</strong>
+                    <small>this site's sample.txt</small>
+                  </button>
+                  <button type="button" data-example-url="https://www.gutenberg.org/cache/epub/11/pg11.txt" data-requires-reader="true">
+                    <strong>Alice in Wonderland</strong>
+                    <small>gutenberg.org · ebook 11</small>
+                  </button>
+                  <button type="button" data-example-url="https://www.gutenberg.org/cache/epub/84/pg84.txt" data-requires-reader="true">
+                    <strong>Frankenstein</strong>
+                    <small>gutenberg.org · ebook 84</small>
+                  </button>
+                </div>
               </div>
               <p class="fine-print">The fallback sends only the requested URL to Jina AI Reader. Some paywalled, private, or protected pages still cannot be read.</p>
             </form>

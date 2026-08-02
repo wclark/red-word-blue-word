@@ -26,6 +26,34 @@ test("buildModel adds sentence-boundary cards", () => {
   assert.equal(model.transitions.get("swim")[0].blue, BOUNDARY);
 });
 
+test("newlines do not create sentence boundaries without punctuation", () => {
+  const model = buildModel("red words wrap\nonto another line\n\nwithout punctuation");
+  assert.equal(model.stats.sentenceCount, 1);
+  assert.equal(model.diagnostics.startCardCount, 1);
+  assert.deepEqual(
+    model.transitions.get(BOUNDARY).map(({ blue }) => blue),
+    ["red"]
+  );
+});
+
+test("punctuation still creates boundaries across pasted lines", () => {
+  const model = buildModel("red words end here.\nblue words start here!\nlast words finish?");
+  assert.equal(model.stats.sentenceCount, 3);
+  assert.deepEqual(
+    model.transitions.get(BOUNDARY).map(({ blue }) => blue),
+    ["red", "blue", "last"]
+  );
+});
+
+test("common abbreviations and decimals do not create false boundaries", () => {
+  const model = buildModel("Dr. Seuss counted 3.14 circles. Then he stopped.");
+  assert.equal(model.stats.sentenceCount, 2);
+  assert.deepEqual(
+    model.transitions.get(BOUNDARY).map(({ blue }) => blue),
+    ["dr", "then"]
+  );
+});
+
 test("duplicate source pairs remain duplicate weighted cards", () => {
   const model = buildModel("Go now. Go now.");
   const goPile = groupCards(model).find(({ red }) => red === "go");

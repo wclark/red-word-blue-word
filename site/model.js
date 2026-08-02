@@ -1,6 +1,7 @@
 export const BOUNDARY = "X";
 
 const WORD_PATTERN = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
+const PERIOD_SENTINEL = "\uE000";
 
 export function normalizeText(text) {
   return String(text ?? "")
@@ -13,16 +14,16 @@ export function normalizeText(text) {
 export function splitSentences(text) {
   const clean = normalizeText(text);
   if (!clean) return [];
+  const punctuationDrivenText = clean.replace(/\s*\n+\s*/g, " ");
+  const protectedText = punctuationDrivenText
+    .replace(/\b(?:e\.g|i\.e|mr|mrs|ms|dr|prof|sr|jr|st|mt|vs|etc)\./giu, (match) =>
+      match.replaceAll(".", PERIOD_SENTINEL)
+    )
+    .replace(/(\d)\.(\d)/gu, `$1${PERIOD_SENTINEL}$2`)
+    .replace(/\b([A-Z])\.(?=\s*(?:[A-Z]\.|[A-Z][a-z]))/gu, `$1${PERIOD_SENTINEL}`);
 
-  if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
-    return [...segmenter.segment(clean)]
-      .map(({ segment }) => segment.trim())
-      .filter((segment) => tokenize(segment).length > 0);
-  }
-
-  return (clean.match(/[^.!?]+(?:[.!?]+|$)/gu) ?? [])
-    .map((segment) => segment.trim())
+  return (protectedText.match(/[^.!?]+(?:[.!?]+|$)/gu) ?? [])
+    .map((segment) => segment.replaceAll(PERIOD_SENTINEL, ".").trim())
     .filter((segment) => tokenize(segment).length > 0);
 }
 

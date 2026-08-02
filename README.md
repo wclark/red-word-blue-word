@@ -21,6 +21,10 @@ from a browser, so the optional reader fallback uses the public
 the requested URL is sent to Jina. Pasting or opening a file keeps the text in
 the browser. Use only text you have the right to analyze.
 
+Known-good examples are built into the URL panel: the app's short `sample.txt`,
+Project Gutenberg's *Alice's Adventures in Wonderland*, and Project Gutenberg's
+*Frankenstein*. The Gutenberg choices automatically enable the reader fallback.
+
 ## Local preview
 
 Serve the `site` directory so browser modules can load:
