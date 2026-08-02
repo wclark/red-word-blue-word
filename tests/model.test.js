@@ -92,6 +92,17 @@ test("filterModel removes a word from both sides of every card", () => {
   assert.ok(filtered.cards.every(({ red, blue }) => red !== "fish" && blue !== "fish"));
   assert.equal(filtered.transitions.has("fish"), false);
   assert.equal(filtered.stats.vocabularyCount, 4);
+  assert.deepEqual(filtered.diagnostics.firstTokens, ["red", "swim", "blue", "rest"]);
+  assert.deepEqual(filtered.diagnostics.lastTokens, ["red", "swim", "blue", "rest"]);
+});
+
+test("token preview omits words no longer referenced by an active card", () => {
+  const source = buildModel("Red blue green. Keep moving.");
+  const filtered = filterModel(source, ["red", "green"]);
+
+  assert.ok(filtered.cards.every(({ red, blue }) => red !== "blue" && blue !== "blue"));
+  assert.deepEqual(filtered.diagnostics.firstTokens, ["keep", "moving"]);
+  assert.deepEqual(filtered.diagnostics.lastTokens, ["keep", "moving"]);
 });
 
 test("filterModel supports multiple removals and protects the X boundary", () => {
