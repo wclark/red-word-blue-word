@@ -1,8 +1,8 @@
-import { BOUNDARY, buildModel, generateSentences, groupCards } from "./model.js";
+import { BOUNDARY, buildModel, filterModel, generateSentences, groupCards } from "./model.js";
 
 const SAMPLE_TEXT = `The red kite climbs above the quiet park. The quiet park wakes under morning light. Morning light warms the red kite. A bluebird circles above the park. The bluebird sings and the kite climbs. Small patterns can make surprising stories.`;
 const MAX_SOURCE_CHARACTERS = 750_000;
-const MAX_VISIBLE_PILES = 80;
+const COLLAPSED_BLUE_WORDS = 12;
 
 const elements = {
   tabs: [...document.querySelectorAll("[role='tab']")],
@@ -43,11 +43,23 @@ const elements = {
   firstTokens: document.querySelector("#first-tokens"),
   lastTokens: document.querySelector("#last-tokens"),
   cardSearch: document.querySelector("#card-search"),
+  cardSort: document.querySelector("#card-sort"),
+  cardPageSize: document.querySelector("#card-page-size"),
   cardPiles: document.querySelector("#card-piles"),
   deckSummary: document.querySelector("#deck-summary"),
+  deckPrevious: document.querySelector("#deck-previous"),
+  deckNext: document.querySelector("#deck-next"),
+  deckPageStatus: document.querySelector("#deck-page-status"),
+  modelEdits: document.querySelector("#model-edits"),
+  modelEditStatus: document.querySelector("#model-edit-status"),
+  restoreWords: document.querySelector("#restore-words"),
 };
 
-let currentModel = buildModel(SAMPLE_TEXT);
+let sourceModel = buildModel(SAMPLE_TEXT);
+let currentModel = sourceModel;
+let deckPage = 1;
+const removedWords = new Set();
+const expandedPiles = new Set();
 
 function number(value) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -137,24 +149,85 @@ function displayWord(word) {
   return word === BOUNDARY ? "X" : word;
 }
 
+function renderModelEdits(message = "") {
+  if (!removedWords.size) {
+    elements.modelEdits.hidden = true;
+    elements.modelEditStatus.textContent = "";
+    return;
+  }
+
+  elements.modelEdits.hidden = false;
+  const words = [...removedWords].sort((a, b) => a.localeCompare(b));
+  elements.modelEditStatus.textContent = message ||
+    `${number(words.length)} removed word${words.length === 1 ? "" : "s"}: ${words.join(", ")}. ` +
+    `${number(currentModel.diagnostics.removedCardCount)} cards removed from the model.`;
+}
+
+function removeWordFromModel(word) {
+  if (word === BOUNDARY || removedWords.has(word)) return;
+  const previousCardCount = currentModel.stats.cardCount;
+  removedWords.add(word);
+  expandedPiles.delete(word);
+  currentModel = filterModel(sourceModel, removedWords);
+  deckPage = 1;
+  updateStats();
+  renderDeck();
+  makeSentences();
+
+  const removedNow = previousCardCount - currentModel.stats.cardCount;
+  renderModelEdits(
+    `Removed “${word}” and ${number(removedNow)} card${removedNow === 1 ? "" : "s"} where it appeared on the red or blue side. ` +
+    `${number(currentModel.diagnostics.removedCardCount)} cards are now removed in total.`
+  );
+}
+
+function restoreRemovedWords() {
+  if (!removedWords.size) return;
+  removedWords.clear();
+  expandedPiles.clear();
+  currentModel = sourceModel;
+  deckPage = 1;
+  updateStats();
+  renderDeck();
+  makeSentences();
+  renderModelEdits();
+  showStatus("All removed words and their cards have been restored.", "ready");
+}
+
 function renderDeck() {
   const query = elements.cardSearch.value.trim().toLocaleLowerCase("en-US");
-  const groups = groupCards(currentModel);
+  const groups = groupCards(currentModel, { sortBy: elements.cardSort.value });
   const matching = groups.filter(({ red }) => !query || red.toLocaleLowerCase("en-US").includes(query));
-  const visible = matching.slice(0, MAX_VISIBLE_PILES);
+  const pageSize = Number(elements.cardPageSize.value);
+  const pageCount = Math.max(1, Math.ceil(matching.length / pageSize));
+  deckPage = Math.min(Math.max(1, deckPage), pageCount);
+  const start = (deckPage - 1) * pageSize;
+  const visible = matching.slice(start, start + pageSize);
   elements.cardPiles.replaceChildren();
 
   visible.forEach((group) => {
     const pile = document.createElement("article");
     pile.className = "card-pile";
 
-    const redSide = document.createElement("div");
+    const redSide = document.createElement(group.red === BOUNDARY ? "div" : "button");
     redSide.className = "pile-red";
+    if (group.red !== BOUNDARY) {
+      redSide.type = "button";
+      redSide.setAttribute(
+        "aria-label",
+        `Remove ${group.red} and every card that references it from the model`
+      );
+      redSide.title = `Remove “${group.red}” from the model`;
+      redSide.addEventListener("click", () => removeWordFromModel(group.red));
+    }
     const redLabel = document.createElement("span");
-    redLabel.textContent = group.red === BOUNDARY ? "sentence starts" : "red word";
+    redLabel.textContent = group.red === BOUNDARY ? "protected boundary" : "click to remove";
     const redWord = document.createElement("strong");
     redWord.textContent = displayWord(group.red);
-    redSide.append(redLabel, redWord);
+    const redMeta = document.createElement("small");
+    redMeta.className = "pile-meta";
+    redMeta.textContent = `${number(group.total)} card${group.total === 1 ? "" : "s"} · ${number(group.blueWords.length)} blue choice${group.blueWords.length === 1 ? "" : "s"}`;
+    redSide.append(redLabel, redWord, redMeta);
 
     const arrow = document.createElement("span");
     arrow.className = "pile-arrow";
@@ -163,7 +236,9 @@ function renderDeck() {
 
     const blueSide = document.createElement("div");
     blueSide.className = "pile-blues";
-    group.blueWords.slice(0, 12).forEach(({ blue, count }) => {
+    const expanded = expandedPiles.has(group.red);
+    const displayedBlueWords = expanded ? group.blueWords : group.blueWords.slice(0, COLLAPSED_BLUE_WORDS);
+    displayedBlueWords.forEach(({ blue, count }) => {
       const chip = document.createElement("span");
       chip.className = "blue-chip";
       const word = document.createElement("span");
@@ -176,10 +251,19 @@ function renderDeck() {
       }
       blueSide.append(chip);
     });
-    if (group.blueWords.length > 12) {
-      const more = document.createElement("span");
+    if (group.blueWords.length > COLLAPSED_BLUE_WORDS) {
+      const more = document.createElement("button");
+      more.type = "button";
       more.className = "more-chip";
-      more.textContent = `+${group.blueWords.length - 12} more`;
+      more.setAttribute("aria-expanded", String(expanded));
+      more.textContent = expanded
+        ? "Show fewer"
+        : `Show ${number(group.blueWords.length - COLLAPSED_BLUE_WORDS)} more`;
+      more.addEventListener("click", () => {
+        if (expanded) expandedPiles.delete(group.red);
+        else expandedPiles.add(group.red);
+        renderDeck();
+      });
       blueSide.append(more);
     }
 
@@ -190,12 +274,22 @@ function renderDeck() {
   if (!visible.length) {
     const empty = document.createElement("p");
     empty.className = "empty-deck";
-    empty.textContent = `No red-word pile matches “${elements.cardSearch.value.trim()}”.`;
+    empty.textContent = query
+      ? `No red-word pile matches “${elements.cardSearch.value.trim()}”.`
+      : "No red-word piles remain in this model.";
     elements.cardPiles.append(empty);
   }
 
-  const suffix = matching.length > visible.length ? ` Showing the first ${MAX_VISIBLE_PILES}.` : "";
-  elements.deckSummary.textContent = `${number(matching.length)} of ${number(groups.length)} red-word piles.${suffix}`;
+  if (matching.length) {
+    const end = start + visible.length;
+    const scope = query ? `${number(matching.length)} matching` : number(matching.length);
+    elements.deckSummary.textContent = `Showing ${number(start + 1)}–${number(end)} of ${scope} red-word piles${query ? ` (${number(groups.length)} total)` : ""}.`;
+  } else {
+    elements.deckSummary.textContent = `0 of ${number(groups.length)} red-word piles.`;
+  }
+  elements.deckPageStatus.textContent = `Page ${number(deckPage)} of ${number(pageCount)}`;
+  elements.deckPrevious.disabled = deckPage <= 1;
+  elements.deckNext.disabled = deckPage >= pageCount;
 }
 
 function renderTrail(container, cards) {
@@ -255,11 +349,16 @@ function train(text, sourceLabel) {
   if (nextModel.stats.wordCount < 2) {
     throw new Error("Add at least two words so there is a pattern to follow.");
   }
-  currentModel = nextModel;
+  sourceModel = nextModel;
+  currentModel = sourceModel;
+  removedWords.clear();
+  expandedPiles.clear();
+  deckPage = 1;
   elements.sourceName.textContent = sourceLabel;
   elements.cardSearch.value = "";
   updateStats();
   renderDeck();
+  renderModelEdits();
   makeSentences();
   return clipped.length < String(text ?? "").length;
 }
@@ -278,9 +377,11 @@ function makeSentences() {
   const completed = results.filter(({ reason }) => reason === "boundary").length;
   const limited = results.filter(({ reason }) => reason === "maximum").length;
   const deadEnds = results.filter(({ reason }) => reason === "dead-end").length;
+  const emptyPaths = results.filter(({ reason }) => reason === "empty").length;
   const notes = [`${number(completed)} of ${number(results.length)} reached the X boundary`];
   if (limited) notes.push(`${number(limited)} hit the word limit`);
   if (deadEnds) notes.push(`${number(deadEnds)} ran out of an available card`);
+  if (emptyPaths) notes.push(`${number(emptyPaths)} could not start from X`);
   elements.generationNote.textContent = `${notes.join(" · ")}. Open a result to inspect its path.`;
 }
 
@@ -432,7 +533,35 @@ elements.sentenceCount.addEventListener("input", () => {
   elements.generationSubmit.firstChild.textContent = `Generate ${count} ${noun} `;
 });
 
-elements.cardSearch.addEventListener("input", renderDeck);
+elements.cardSearch.addEventListener("input", () => {
+  deckPage = 1;
+  renderDeck();
+});
+
+elements.cardSort.addEventListener("change", () => {
+  deckPage = 1;
+  renderDeck();
+});
+
+elements.cardPageSize.addEventListener("change", () => {
+  deckPage = 1;
+  renderDeck();
+});
+
+elements.deckPrevious.addEventListener("click", () => {
+  deckPage -= 1;
+  renderDeck();
+  elements.cardPiles.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+elements.deckNext.addEventListener("click", () => {
+  deckPage += 1;
+  renderDeck();
+  elements.cardPiles.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+elements.restoreWords.addEventListener("click", restoreRemovedWords);
 
 updateStats();
 renderDeck();
+renderModelEdits();

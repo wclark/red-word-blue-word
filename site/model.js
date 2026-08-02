@@ -38,39 +38,46 @@ export function buildModel(text) {
   const sentences = splitSentences(normalized);
   const sentenceWords = sentences.map((sentence) => tokenize(sentence));
   const cards = [];
-  const transitions = new Map();
-  const vocabulary = new Set();
-  const uniquePairs = new Set();
-  const pairCounts = new Map();
-  const allWords = [];
-  let wordCount = 0;
 
   sentenceWords.forEach((words, sentenceIndex) => {
-    wordCount += words.length;
-    words.forEach((word) => vocabulary.add(word));
-    allWords.push(...words);
-
     const sequence = [BOUNDARY, ...words, BOUNDARY];
     for (let index = 0; index < sequence.length - 1; index += 1) {
-      const card = {
+      cards.push({
         id: cards.length,
         red: sequence[index],
         blue: sequence[index + 1],
         sentenceIndex,
-      };
-      cards.push(card);
-      const pairKey = JSON.stringify([card.red, card.blue]);
-      uniquePairs.add(pairKey);
-      pairCounts.set(pairKey, {
-        red: card.red,
-        blue: card.blue,
-        count: (pairCounts.get(pairKey)?.count ?? 0) + 1,
       });
-      if (!transitions.has(card.red)) transitions.set(card.red, []);
-      transitions.get(card.red).push(card);
     }
   });
 
+  const source = { normalized, sentenceWords };
+  return createModel(cards, source, new Set(), cards);
+}
+
+function createModel(cards, source, removedWords, baseCards) {
+  const transitions = new Map();
+  const uniquePairs = new Set();
+  const pairCounts = new Map();
+
+  cards.forEach((card) => {
+    const pairKey = JSON.stringify([card.red, card.blue]);
+    uniquePairs.add(pairKey);
+    pairCounts.set(pairKey, {
+      red: card.red,
+      blue: card.blue,
+      count: (pairCounts.get(pairKey)?.count ?? 0) + 1,
+    });
+    if (!transitions.has(card.red)) transitions.set(card.red, []);
+    transitions.get(card.red).push(card);
+  });
+
+  const activeSentenceWords = source.sentenceWords.map((words) =>
+    words.filter((word) => !removedWords.has(word))
+  );
+  const activeWords = activeSentenceWords.flat();
+  const activeSentenceLengths = activeSentenceWords.map((words) => words.length).filter(Boolean);
+  const vocabulary = new Set(activeWords);
   const nextWordCounts = [...transitions.values()].map(
     (outgoingCards) => new Set(outgoingCards.map(({ blue }) => blue)).size
   );
@@ -81,36 +88,58 @@ export function buildModel(text) {
   return {
     cards,
     transitions,
+    source,
+    baseCards,
+    removedWords: [...removedWords].sort((a, b) => a.localeCompare(b)),
     stats: {
-      wordCount,
+      wordCount: activeWords.length,
       cardCount: cards.length,
       uniquePairCount: uniquePairs.size,
-      sentenceCount: sentences.length,
+      sentenceCount: startCardCount,
       vocabularyCount: vocabulary.size,
     },
     diagnostics: {
-      characterCount: normalized.length,
+      characterCount: source.normalized.length,
       duplicateCardCount,
       duplicateCardRate: cards.length ? duplicateCardCount / cards.length : 0,
+      removedCardCount: baseCards.length - cards.length,
+      removedWordCount: removedWords.size,
       redPileCount: transitions.size,
       branchingPileCount: nextWordCounts.filter((count) => count > 1).length,
       averageNextWordsPerPile: nextWordCounts.length
         ? nextWordCounts.reduce((sum, count) => sum + count, 0) / nextWordCounts.length
         : 0,
       widestPileNextWordCount: nextWordCounts.length ? Math.max(...nextWordCounts) : 0,
-      averageSentenceLength: sentences.length ? wordCount / sentences.length : 0,
-      longestSentenceLength: sentenceWords.length
-        ? Math.max(...sentenceWords.map((words) => words.length))
+      averageSentenceLength: activeSentenceLengths.length
+        ? activeSentenceLengths.reduce((sum, length) => sum + length, 0) / activeSentenceLengths.length
         : 0,
+      longestSentenceLength: activeSentenceLengths.length ? Math.max(...activeSentenceLengths) : 0,
       startCardCount,
       endCardCount,
       topPairs: [...pairCounts.values()]
         .sort((a, b) => b.count - a.count || a.red.localeCompare(b.red) || a.blue.localeCompare(b.blue))
         .slice(0, 10),
-      firstTokens: allWords.slice(0, 18),
-      lastTokens: allWords.slice(-18),
+      firstTokens: activeWords.slice(0, 18),
+      lastTokens: activeWords.slice(-18),
     },
   };
+}
+
+export function filterModel(model, excludedWords = []) {
+  if (!model?.baseCards || !model?.source) return model;
+  const candidates = typeof excludedWords === "string" ? [excludedWords] : excludedWords;
+  const removedWords = new Set();
+
+  for (const candidate of candidates ?? []) {
+    if (candidate === BOUNDARY) continue;
+    const word = String(candidate ?? "").toLocaleLowerCase("en-US");
+    if (word) removedWords.add(word);
+  }
+
+  const cards = model.baseCards.filter(
+    ({ red, blue }) => !removedWords.has(red) && !removedWords.has(blue)
+  );
+  return createModel(cards, model.source, removedWords, model.baseCards);
 }
 
 function choose(items, random) {
@@ -183,7 +212,8 @@ export function generateSentences(model, count, options = {}) {
   return Array.from({ length: sentenceCount }, () => generateSentence(model, options));
 }
 
-export function groupCards(model) {
+export function groupCards(model, options = {}) {
+  const sortBy = typeof options === "string" ? options : options.sortBy ?? "alphabetical";
   return [...model.transitions.entries()]
     .map(([red, cards]) => {
       const counts = new Map();
@@ -199,6 +229,13 @@ export function groupCards(model) {
     .sort((a, b) => {
       if (a.red === BOUNDARY) return -1;
       if (b.red === BOUNDARY) return 1;
-      return a.red.localeCompare(b.red);
+      const alphabetical = a.red.localeCompare(b.red);
+      if (sortBy === "alphabetical-desc") return -alphabetical;
+      if (sortBy === "frequency-desc") return b.total - a.total || alphabetical;
+      if (sortBy === "frequency-asc") return a.total - b.total || alphabetical;
+      if (sortBy === "branching-desc") {
+        return b.blueWords.length - a.blueWords.length || b.total - a.total || alphabetical;
+      }
+      return alphabetical;
     });
 }

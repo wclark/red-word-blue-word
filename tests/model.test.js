@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   BOUNDARY,
   buildModel,
+  filterModel,
   generateSentence,
   generateSentences,
   groupCards,
@@ -77,6 +78,43 @@ test("model diagnostics summarize branching and sentence lengths", () => {
     model.diagnostics.topPairs.find(({ red, blue }) => red === "X" && blue === "red"),
     { red: "X", blue: "red", count: 2 }
   );
+});
+
+test("filterModel removes a word from both sides of every card", () => {
+  const source = buildModel("Red fish swim. Blue fish rest!");
+  const filtered = filterModel(source, ["fish"]);
+
+  assert.equal(source.stats.cardCount, 8);
+  assert.equal(filtered.stats.cardCount, 4);
+  assert.equal(filtered.diagnostics.removedCardCount, 4);
+  assert.equal(filtered.diagnostics.removedWordCount, 1);
+  assert.deepEqual(filtered.removedWords, ["fish"]);
+  assert.ok(filtered.cards.every(({ red, blue }) => red !== "fish" && blue !== "fish"));
+  assert.equal(filtered.transitions.has("fish"), false);
+  assert.equal(filtered.stats.vocabularyCount, 4);
+});
+
+test("filterModel supports multiple removals and protects the X boundary", () => {
+  const source = buildModel("Red fish swim. Blue fish rest!");
+  const filtered = filterModel(source, [BOUNDARY, "red", "fish"]);
+
+  assert.deepEqual(filtered.removedWords, ["fish", "red"]);
+  assert.equal(filtered.diagnostics.startCardCount, 1);
+  assert.ok(filtered.cards.some(({ red }) => red === BOUNDARY));
+  assert.ok(filtered.cards.every(({ red, blue }) => !["red", "fish"].includes(red) && !["red", "fish"].includes(blue)));
+});
+
+test("groupCards can sort piles by frequency and branching", () => {
+  const model = buildModel("A cat naps. A dog runs. A fox runs. B cat runs.");
+  const byFrequency = groupCards(model, { sortBy: "frequency-desc" });
+  const byBranching = groupCards(model, { sortBy: "branching-desc" });
+
+  assert.equal(byFrequency[0].red, BOUNDARY);
+  assert.equal(byFrequency[1].red, "a");
+  assert.equal(byFrequency[1].total, 3);
+  assert.equal(byBranching[0].red, BOUNDARY);
+  assert.equal(byBranching[1].red, "a");
+  assert.equal(byBranching[1].blueWords.length, 3);
 });
 
 test("generation follows a deterministic complete chain", () => {
