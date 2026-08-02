@@ -35,13 +35,10 @@ export function tokenize(text) {
   );
 }
 
-export function buildModel(text) {
-  const normalized = normalizeText(text);
-  const sentences = splitSentences(normalized);
-  const sentenceWords = sentences.map((sentence) => tokenize(sentence));
+function cardsFromSentenceWords(sentenceWords) {
   const cards = [];
-
   sentenceWords.forEach((words, sentenceIndex) => {
+    if (!words.length) return;
     const sequence = [BOUNDARY, ...words, BOUNDARY];
     for (let index = 0; index < sequence.length - 1; index += 1) {
       cards.push({
@@ -52,12 +49,53 @@ export function buildModel(text) {
       });
     }
   });
-
-  const source = { normalized, sentenceWords };
-  return createModel(cards, source, new Set(), cards);
+  return cards;
 }
 
-function createModel(cards, source, removedWords, baseCards) {
+function normalizeRemovedSequences(sequences = []) {
+  const candidates = Array.isArray(sequences) ? sequences : [];
+  const normalized = [];
+  const seen = new Set();
+
+  candidates.forEach((candidate) => {
+    const words = (Array.isArray(candidate) ? candidate : tokenize(candidate))
+      .map((word) => String(word ?? "").toLocaleLowerCase("en-US"))
+      .filter((word) => word && word !== BOUNDARY);
+    if (words.length < 2) return;
+    const key = JSON.stringify(words);
+    if (seen.has(key)) return;
+    seen.add(key);
+    normalized.push(words);
+  });
+  return normalized;
+}
+
+function removeSequenceOccurrences(words, sequences) {
+  return sequences.reduce((remainingWords, sequence) => {
+    const filtered = [];
+    for (let index = 0; index < remainingWords.length;) {
+      const matches = sequence.every((word, offset) => remainingWords[index + offset] === word);
+      if (matches) index += sequence.length;
+      else {
+        filtered.push(remainingWords[index]);
+        index += 1;
+      }
+    }
+    return filtered;
+  }, [...words]);
+}
+
+export function buildModel(text) {
+  const normalized = normalizeText(text);
+  const sentences = splitSentences(normalized);
+  const sentenceWords = sentences.map((sentence) => tokenize(sentence));
+  const cards = cardsFromSentenceWords(sentenceWords);
+
+  const source = { normalized, sentenceWords };
+  return createModel(cards, source, new Set(), cards, sentenceWords, []);
+}
+
+function createModel(cards, source, removedWords, baseCards, modelSentenceWords, removedSequences) {
   const transitions = new Map();
   const uniquePairs = new Set();
   const pairCounts = new Map();
@@ -74,7 +112,7 @@ function createModel(cards, source, removedWords, baseCards) {
     transitions.get(card.red).push(card);
   });
 
-  const activeSentenceWords = source.sentenceWords.map((words) =>
+  const activeSentenceWords = modelSentenceWords.map((words) =>
     words.filter((word) => !removedWords.has(word))
   );
   const activeWords = activeSentenceWords.flat();
@@ -100,6 +138,7 @@ function createModel(cards, source, removedWords, baseCards) {
     source,
     baseCards,
     removedWords: [...removedWords].sort((a, b) => a.localeCompare(b)),
+    removedSequences: removedSequences.map((sequence) => [...sequence]),
     stats: {
       wordCount: activeWords.length,
       cardCount: cards.length,
@@ -113,6 +152,8 @@ function createModel(cards, source, removedWords, baseCards) {
       duplicateCardRate: cards.length ? duplicateCardCount / cards.length : 0,
       removedCardCount: baseCards.length - cards.length,
       removedWordCount: removedWords.size,
+      removedSequenceCount: removedSequences.length,
+      removedSequenceTokenCount: source.sentenceWords.flat().length - modelSentenceWords.flat().length,
       redPileCount: transitions.size,
       branchingPileCount: nextWordCounts.filter((count) => count > 1).length,
       averageNextWordsPerPile: nextWordCounts.length
@@ -138,7 +179,7 @@ function createModel(cards, source, removedWords, baseCards) {
   };
 }
 
-export function filterModel(model, excludedWords = []) {
+export function filterModel(model, excludedWords = [], excludedSequences = []) {
   if (!model?.baseCards || !model?.source) return model;
   const candidates = typeof excludedWords === "string" ? [excludedWords] : excludedWords;
   const removedWords = new Set();
@@ -149,10 +190,15 @@ export function filterModel(model, excludedWords = []) {
     if (word) removedWords.add(word);
   }
 
-  const cards = model.baseCards.filter(
+  const removedSequences = normalizeRemovedSequences(excludedSequences);
+  const modelSentenceWords = model.source.sentenceWords.map((words) =>
+    removeSequenceOccurrences(words, removedSequences)
+  );
+  const sequenceCards = cardsFromSentenceWords(modelSentenceWords);
+  const cards = sequenceCards.filter(
     ({ red, blue }) => !removedWords.has(red) && !removedWords.has(blue)
   );
-  return createModel(cards, model.source, removedWords, model.baseCards);
+  return createModel(cards, model.source, removedWords, model.baseCards, modelSentenceWords, removedSequences);
 }
 
 export function createModelSnapshot(model, options = {}) {
@@ -167,6 +213,7 @@ export function createModelSnapshot(model, options = {}) {
     },
     pruning: {
       removedWords: [...(model.removedWords ?? [])],
+      removedSequences: (model.removedSequences ?? []).map((sequence) => [...sequence]),
     },
   };
 }
@@ -188,13 +235,22 @@ export function loadModelSnapshot(value) {
   if (!Array.isArray(snapshot.pruning?.removedWords)) {
     throw new Error("That model file has invalid pruning data.");
   }
+  if (snapshot.pruning.removedSequences !== undefined && (
+    !Array.isArray(snapshot.pruning.removedSequences) ||
+    snapshot.pruning.removedSequences.some((sequence) =>
+      !Array.isArray(sequence) || sequence.some((word) => typeof word !== "string")
+    )
+  )) {
+    throw new Error("That model file has invalid sequence-pruning data.");
+  }
 
   const sourceModel = buildModel(snapshot.source.text);
   if (sourceModel.stats.wordCount < 2) {
     throw new Error("That model file does not contain enough source words.");
   }
   const removedWords = snapshot.pruning.removedWords.filter((word) => typeof word === "string");
-  const model = filterModel(sourceModel, removedWords);
+  const removedSequences = snapshot.pruning.removedSequences ?? [];
+  const model = filterModel(sourceModel, removedWords, removedSequences);
   return {
     sourceModel,
     model,
@@ -285,6 +341,23 @@ export function generateSentences(model, count, options = {}) {
   return Array.from({ length: sentenceCount }, () => generateSentence(model, options));
 }
 
+function deterministicPathFrom(model, startRed) {
+  const path = [];
+  const visited = new Set([startRed]);
+  let red = startRed;
+
+  while (true) {
+    const choices = [...new Set((model.transitions.get(red) ?? []).map(({ blue }) => blue))];
+    if (choices.length !== 1) break;
+    const blue = choices[0];
+    path.push(blue);
+    if (blue === BOUNDARY || visited.has(blue)) break;
+    visited.add(blue);
+    red = blue;
+  }
+  return path;
+}
+
 export function groupCards(model, options = {}) {
   const sortBy = typeof options === "string" ? options : options.sortBy ?? "alphabetical";
   return [...model.transitions.entries()]
@@ -294,6 +367,7 @@ export function groupCards(model, options = {}) {
       return {
         red,
         total: cards.length,
+        deterministicPath: deterministicPathFrom(model, red),
         blueWords: [...counts.entries()]
           .map(([blue, count]) => ({ blue, count }))
           .sort((a, b) => b.count - a.count || a.blue.localeCompare(b.blue)),

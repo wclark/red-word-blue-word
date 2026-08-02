@@ -29,46 +29,30 @@
       </a>
       <nav class="screen-nav" aria-label="Lab screens">
         <a href="#source" data-screen-link="source">Source</a>
-        <a href="#generate" data-screen-link="generate">Generate</a>
         <a href="#model" data-screen-link="model">Model</a>
+        <a href="#generate" data-screen-link="generate">Generate</a>
         <a href="#learn" data-screen-link="learn">Learn</a>
       </nav>
     </header>
 
     <main id="top">
       <div class="app-screen source-screen" id="source" data-app-screen="source">
-      <section class="hero" aria-labelledby="page-title">
-        <div class="hero-copy">
+      <section class="source-intro" aria-labelledby="page-title">
+        <div>
           <p class="eyebrow">A tiny language model you can hold in your head</p>
           <h1 id="page-title">
             <span class="red-ink">Red Word,</span>
             <span class="blue-ink">Blue Word.</span>
           </h1>
           <p class="hero-lede">
-            Feed it a story. See every word-pair card. Then follow the chain to
-            make a sentence no one wrote before.
+            Feed it a story, clean the model, then follow its cards to make new sentences.
           </p>
-          <a class="button button-dark" href="#studio">Build a word deck <span aria-hidden="true">→</span></a>
         </div>
-
-        <div class="hero-demo" aria-label="An example chain of word-pair cards">
-          <p class="demo-label">One card leads to the next</p>
-          <div class="demo-card demo-card-one">
-            <span class="word-label">red word</span>
-            <strong class="red-ink">the</strong>
-            <span class="card-arrow" aria-hidden="true">→</span>
-            <span class="word-label">blue word</span>
-            <strong class="blue-ink">moon</strong>
-          </div>
-          <div class="demo-card demo-card-two">
-            <span class="word-label">red word</span>
-            <strong class="red-ink">moon</strong>
-            <span class="card-arrow" aria-hidden="true">→</span>
-            <span class="word-label">blue word</span>
-            <strong class="blue-ink">glows</strong>
-          </div>
-          <p class="scribble" aria-hidden="true">match the blue<br>to the next red!</p>
-        </div>
+        <ol class="source-flow" aria-label="Default workflow">
+          <li><span>1</span><strong>Import</strong><small>Choose the source text</small></li>
+          <li><span>2</span><strong>Inspect</strong><small>Clean words and sequences</small></li>
+          <li><span>3</span><strong>Generate</strong><small>Follow the revised model</small></li>
+        </ol>
       </section>
 
       <section class="studio section-shell" id="studio" aria-labelledby="studio-title">
@@ -76,7 +60,7 @@
           <p class="step-kicker"><span>01</span> Train the model</p>
           <div>
             <h2 id="studio-title">Choose your source text</h2>
-            <p>Nothing is uploaded by this app. Your browser builds the deck right here.</p>
+            <p>Nothing is uploaded. After import, you will review the model before generating.</p>
           </div>
         </div>
 
@@ -101,8 +85,8 @@
                   <span>Use Jina Reader if the site blocks direct browser access</span>
                 </label>
               </div>
-              <div class="sample-urls" aria-labelledby="sample-urls-title">
-                <p id="sample-urls-title">Known-good sample URLs</p>
+              <details class="sample-urls">
+                <summary>Known-good sample URLs</summary>
                 <div class="sample-url-grid">
                   <button type="button" data-example-url="sample.txt">
                     <strong>Quick built-in sample</strong>
@@ -117,7 +101,7 @@
                     <small>gutenberg.org · ebook 84</small>
                   </button>
                 </div>
-              </div>
+              </details>
               <p class="fine-print">The fallback sends only the requested URL to Jina AI Reader. Some paywalled, private, or protected pages still cannot be read.</p>
             </form>
           </div>
@@ -147,7 +131,7 @@
               <input id="model-file" type="file" accept=".rwbw.json,.json,application/json">
               <span class="drop-icon" aria-hidden="true">↥</span>
               <strong>Open a saved Red Word, Blue Word model</strong>
-              <span>Reload its source text and every word you pruned</span>
+              <span>Reload its source text and every pruning decision</span>
             </label>
           </div>
 
@@ -168,7 +152,7 @@
 
       <section class="generator section-shell app-screen" id="generate" data-app-screen="generate" aria-labelledby="generator-title" hidden>
         <div class="section-heading light-heading">
-          <p class="step-kicker"><span>02</span> Follow the chain</p>
+          <p class="step-kicker"><span>03</span> Follow the chain</p>
           <div>
             <h2 id="generator-title">Generate new sentences</h2>
             <p>Run several paths at once. Every sentence keeps its complete bigram chain visible.</p>
@@ -216,19 +200,22 @@
 
       <section class="deck section-shell app-screen" id="model" data-app-screen="model" aria-labelledby="deck-title" hidden>
         <div class="section-heading">
-          <p class="step-kicker"><span>03</span> Look inside</p>
+          <p class="step-kicker"><span>02</span> Clean the model</p>
           <div>
             <h2 id="deck-title">Explore the card piles</h2>
-            <p>Every occurrence becomes a card. Click a red word to remove it and every card that references it.</p>
+            <p>Remove a red word everywhere, or remove a fixed source sequence before its bigrams are rebuilt.</p>
           </div>
         </div>
 
         <div class="model-file-actions">
           <div>
             <strong>Keep this version of the model</strong>
-            <p>Download the source and pruning list, then load it again from the Source screen.</p>
+            <p>Download the source and all pruning decisions, or continue when the model looks clean.</p>
           </div>
-          <button class="button button-dark" type="button" id="download-model">Download model</button>
+          <div class="model-file-buttons">
+            <button class="button button-dark" type="button" id="download-model">Download model</button>
+            <a class="button button-red" href="#generate">Continue to Generate <span aria-hidden="true">→</span></a>
+          </div>
         </div>
 
         <section class="model-report" aria-labelledby="report-title">
@@ -274,7 +261,7 @@
 
         <div class="model-edits" id="model-edits" hidden>
           <p id="model-edit-status" role="status" aria-live="polite"></p>
-          <button class="button button-small" type="button" id="restore-words">Restore all removed words</button>
+          <button class="button button-small" type="button" id="restore-words">Restore all removals</button>
         </div>
         <div class="deck-tools">
           <div class="deck-search">

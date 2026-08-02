@@ -67,6 +67,7 @@ let currentSourceLabel = "Example text";
 let deckPage = 1;
 let screenRouter;
 const removedWords = new Set();
+const removedSequences = [];
 const expandedPiles = new Set();
 const generatorScreen = createGeneratorScreen({ getModel: () => currentModel });
 
@@ -178,8 +179,16 @@ function displayWord(word) {
   return word === BOUNDARY ? "X" : word;
 }
 
+function rebuildFromPruning() {
+  currentModel = filterModel(sourceModel, removedWords, removedSequences);
+  deckPage = 1;
+  updateStats();
+  renderDeck();
+  generatorScreen.reset();
+}
+
 function renderModelEdits(message = "") {
-  if (!removedWords.size) {
+  if (!removedWords.size && !removedSequences.length) {
     elements.modelEdits.hidden = true;
     elements.modelEditStatus.textContent = "";
     return;
@@ -187,9 +196,17 @@ function renderModelEdits(message = "") {
 
   elements.modelEdits.hidden = false;
   const words = [...removedWords].sort((a, b) => a.localeCompare(b));
+  const decisions = [];
+  if (words.length) {
+    decisions.push(`${number(words.length)} removed word${words.length === 1 ? "" : "s"}: ${words.join(", ")}`);
+  }
+  if (removedSequences.length) {
+    const examples = removedSequences.slice(0, 2).map((sequence) => `“${sequence.join(" ")}”`).join(", ");
+    const extra = removedSequences.length > 2 ? ` +${number(removedSequences.length - 2)} more` : "";
+    decisions.push(`${number(removedSequences.length)} removed sequence${removedSequences.length === 1 ? "" : "s"}: ${examples}${extra}`);
+  }
   elements.modelEditStatus.textContent = message ||
-    `${number(words.length)} removed word${words.length === 1 ? "" : "s"}: ${words.join(", ")}. ` +
-    `${number(currentModel.diagnostics.removedCardCount)} cards removed from the model.`;
+    `${decisions.join(" · ")}. ${number(currentModel.diagnostics.removedCardCount)} cards removed from the model.`;
 }
 
 function removeWordFromModel(word) {
@@ -197,11 +214,7 @@ function removeWordFromModel(word) {
   const previousCardCount = currentModel.stats.cardCount;
   removedWords.add(word);
   expandedPiles.delete(word);
-  currentModel = filterModel(sourceModel, removedWords);
-  deckPage = 1;
-  updateStats();
-  renderDeck();
-  generatorScreen.generate();
+  rebuildFromPruning();
 
   const removedNow = previousCardCount - currentModel.stats.cardCount;
   renderModelEdits(
@@ -210,17 +223,32 @@ function removeWordFromModel(word) {
   );
 }
 
+function removeSequenceFromModel(sequence) {
+  const words = sequence.filter((word) => word !== BOUNDARY);
+  if (words.length < 2) return;
+  const key = JSON.stringify(words);
+  if (removedSequences.some((removed) => JSON.stringify(removed) === key)) return;
+  removedSequences.push(words);
+  expandedPiles.clear();
+  rebuildFromPruning();
+  renderModelEdits(
+    `Removed every occurrence of “${words.join(" ")}” from the token stream before rebuilding the bigrams. ` +
+    `${number(currentModel.diagnostics.removedCardCount)} cards are now removed in total.`
+  );
+}
+
 function restoreRemovedWords() {
-  if (!removedWords.size) return;
+  if (!removedWords.size && !removedSequences.length) return;
   removedWords.clear();
+  removedSequences.splice(0);
   expandedPiles.clear();
   currentModel = sourceModel;
   deckPage = 1;
   updateStats();
   renderDeck();
-  generatorScreen.generate();
+  generatorScreen.reset();
   renderModelEdits();
-  showStatus("All removed words and their cards have been restored.", "ready");
+  showStatus("All removed words, sequences, and cards have been restored.", "ready");
 }
 
 function renderDeck() {
@@ -265,35 +293,67 @@ function renderDeck() {
 
     const blueSide = document.createElement("div");
     blueSide.className = "pile-blues";
-    const expanded = expandedPiles.has(group.red);
-    const displayedBlueWords = expanded ? group.blueWords : group.blueWords.slice(0, COLLAPSED_BLUE_WORDS);
-    displayedBlueWords.forEach(({ blue, count }) => {
-      const chip = document.createElement("span");
-      chip.className = "blue-chip";
-      const word = document.createElement("span");
-      word.textContent = blue === BOUNDARY ? "X · end" : blue;
-      chip.append(word);
-      if (count > 1) {
-        const badge = document.createElement("small");
-        badge.textContent = `×${count}`;
-        chip.append(badge);
-      }
-      blueSide.append(chip);
-    });
-    if (group.blueWords.length > COLLAPSED_BLUE_WORDS) {
-      const more = document.createElement("button");
-      more.type = "button";
-      more.className = "more-chip";
-      more.setAttribute("aria-expanded", String(expanded));
-      more.textContent = expanded
-        ? "Show fewer"
-        : `Show ${number(group.blueWords.length - COLLAPSED_BLUE_WORDS)} more`;
-      more.addEventListener("click", () => {
-        if (expanded) expandedPiles.delete(group.red);
-        else expandedPiles.add(group.red);
-        renderDeck();
+    if (group.deterministicPath.length > 1) {
+      blueSide.classList.add("pile-blues-deterministic");
+      const run = document.createElement("div");
+      run.className = "deterministic-run";
+      const runLabel = document.createElement("span");
+      runLabel.className = "deterministic-label";
+      runLabel.textContent = group.total > 1 ? `fixed path · starts ×${number(group.total)}` : "fixed path";
+      const phrase = document.createElement("span");
+      phrase.className = "deterministic-phrase";
+      group.deterministicPath.forEach((word) => {
+        const token = document.createElement("span");
+        token.textContent = word === BOUNDARY ? "X · end" : word;
+        phrase.append(token);
       });
-      blueSide.append(more);
+      run.append(runLabel, phrase);
+      blueSide.append(run);
+
+      const sequence = [group.red, ...group.deterministicPath].filter((word) => word !== BOUNDARY);
+      if (group.red !== BOUNDARY && sequence.length >= 3) {
+        const removeSequence = document.createElement("button");
+        removeSequence.type = "button";
+        removeSequence.className = "sequence-remove";
+        removeSequence.setAttribute(
+          "aria-label",
+          `Remove sequence ${sequence.join(" ")} from the source before rebuilding bigrams`
+        );
+        removeSequence.textContent = `Remove this ${number(sequence.length)}-word source sequence`;
+        removeSequence.addEventListener("click", () => removeSequenceFromModel(sequence));
+        blueSide.append(removeSequence);
+      }
+    } else {
+      const expanded = expandedPiles.has(group.red);
+      const displayedBlueWords = expanded ? group.blueWords : group.blueWords.slice(0, COLLAPSED_BLUE_WORDS);
+      displayedBlueWords.forEach(({ blue, count }) => {
+        const chip = document.createElement("span");
+        chip.className = "blue-chip";
+        const word = document.createElement("span");
+        word.textContent = blue === BOUNDARY ? "X · end" : blue;
+        chip.append(word);
+        if (count > 1) {
+          const badge = document.createElement("small");
+          badge.textContent = `×${count}`;
+          chip.append(badge);
+        }
+        blueSide.append(chip);
+      });
+      if (group.blueWords.length > COLLAPSED_BLUE_WORDS) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "more-chip";
+        more.setAttribute("aria-expanded", String(expanded));
+        more.textContent = expanded
+          ? "Show fewer"
+          : `Show ${number(group.blueWords.length - COLLAPSED_BLUE_WORDS)} more`;
+        more.addEventListener("click", () => {
+          if (expanded) expandedPiles.delete(group.red);
+          else expandedPiles.add(group.red);
+          renderDeck();
+        });
+        blueSide.append(more);
+      }
     }
 
     pile.append(redSide, arrow, blueSide);
@@ -327,6 +387,7 @@ function installModel(nextSourceModel, nextCurrentModel, sourceLabel) {
   currentSourceLabel = sourceLabel;
   removedWords.clear();
   currentModel.removedWords.forEach((word) => removedWords.add(word));
+  removedSequences.splice(0, removedSequences.length, ...(currentModel.removedSequences ?? []).map((sequence) => [...sequence]));
   expandedPiles.clear();
   deckPage = 1;
   elements.sourceName.textContent = sourceLabel;
@@ -334,7 +395,7 @@ function installModel(nextSourceModel, nextCurrentModel, sourceLabel) {
   updateStats();
   renderDeck();
   renderModelEdits();
-  generatorScreen.generate();
+  generatorScreen.reset();
 }
 
 function train(text, sourceLabel) {
@@ -344,6 +405,7 @@ function train(text, sourceLabel) {
     throw new Error("Add at least two words so there is a pattern to follow.");
   }
   installModel(nextModel, nextModel, sourceLabel);
+  screenRouter?.navigate("model");
   return clipped.length < String(text ?? "").length;
 }
 
@@ -383,9 +445,14 @@ async function loadSavedModel(file) {
   try {
     const loaded = loadModelSnapshot(await file.text());
     installModel(loaded.sourceModel, loaded.model, loaded.sourceLabel);
-    const removedCount = loaded.model.removedWords.length;
+    const removedWordCount = loaded.model.removedWords.length;
+    const removedSequenceCount = loaded.model.removedSequences.length;
+    const pruningSummary = [
+      `${number(removedWordCount)} pruned word${removedWordCount === 1 ? "" : "s"}`,
+      `${number(removedSequenceCount)} pruned sequence${removedSequenceCount === 1 ? "" : "s"}`,
+    ].join(" and ");
     showStatus(
-      `Loaded ${file.name} with ${number(removedCount)} pruned word${removedCount === 1 ? "" : "s"}.`,
+      `Loaded ${file.name} with ${pruningSummary}.`,
       "ready"
     );
     elements.modelFileInput.value = "";

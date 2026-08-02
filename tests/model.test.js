@@ -128,9 +128,38 @@ test("groupCards can sort piles by frequency and branching", () => {
   assert.equal(byBranching[1].blueWords.length, 3);
 });
 
+test("groupCards collapses a deterministic run up to its first branching word", () => {
+  const model = buildModel("Start one fork left. Start one fork right.");
+  const startPile = groupCards(model).find(({ red }) => red === "start");
+
+  assert.deepEqual(startPile.blueWords, [{ blue: "one", count: 2 }]);
+  assert.deepEqual(startPile.deterministicPath, ["one", "fork"]);
+});
+
+test("sequence pruning happens before bigrams while preserving the same words elsewhere", () => {
+  const source = buildModel("We dislike very bad phrase today. Very bad dogs bark.");
+  const filtered = filterModel(source, [], [["very", "bad", "phrase"]]);
+  const pairs = filtered.cards.map(({ red, blue }) => [red, blue]);
+
+  assert.ok(pairs.some(([red, blue]) => red === "dislike" && blue === "today"));
+  assert.ok(pairs.some(([red, blue]) => red === "very" && blue === "bad"));
+  assert.ok(pairs.every(([red, blue]) => red !== "phrase" && blue !== "phrase"));
+  assert.deepEqual(filtered.removedSequences, [["very", "bad", "phrase"]]);
+  assert.equal(filtered.diagnostics.removedSequenceTokenCount, 3);
+});
+
+test("removing a whole sentence does not create an X to X card", () => {
+  const source = buildModel("Remove this whole sentence.");
+  const filtered = filterModel(source, [], [["remove", "this", "whole", "sentence"]]);
+
+  assert.equal(filtered.cards.length, 0);
+  assert.equal(filtered.diagnostics.startCardCount, 0);
+  assert.equal(filtered.diagnostics.endCardCount, 0);
+});
+
 test("saved model snapshots preserve source and pruning", () => {
   const source = buildModel("Red fish swim. Blue fish rest!");
-  const filtered = filterModel(source, ["fish"]);
+  const filtered = filterModel(source, ["fish"], [["blue", "fish"]]);
   const snapshot = createModelSnapshot(filtered, {
     sourceLabel: "Fish story",
     savedAt: "2026-08-02T00:00:00.000Z",
@@ -140,11 +169,16 @@ test("saved model snapshots preserve source and pruning", () => {
   assert.equal(snapshot.format, "red-word-blue-word-model");
   assert.equal(restored.sourceLabel, "Fish story");
   assert.deepEqual(restored.model.removedWords, ["fish"]);
+  assert.deepEqual(restored.model.removedSequences, [["blue", "fish"]]);
   assert.deepEqual(
     restored.model.cards.map(({ red, blue }) => [red, blue]),
     filtered.cards.map(({ red, blue }) => [red, blue])
   );
   assert.equal(restored.sourceModel.stats.cardCount, source.stats.cardCount);
+
+  const earlierSnapshot = { ...snapshot, pruning: { removedWords: ["fish"] } };
+  const earlierRestored = loadModelSnapshot(earlierSnapshot);
+  assert.deepEqual(earlierRestored.model.removedSequences, []);
 });
 
 test("loadModelSnapshot rejects unrelated JSON", () => {

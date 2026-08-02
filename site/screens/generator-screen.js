@@ -76,6 +76,15 @@ export function createGeneratorScreen({ getModel }) {
   };
   let lastResults = [];
 
+  function reset(note = "The model is ready. Choose the settings, then generate when you are satisfied with the cleanup.") {
+    lastResults = [];
+    const placeholder = document.createElement("li");
+    placeholder.className = "generated-placeholder";
+    placeholder.textContent = "Your cleaned model is ready to generate.";
+    elements.generatedList.replaceChildren(placeholder);
+    elements.generationNote.textContent = note;
+  }
+
   function generate() {
     const withReplacement = document.querySelector("input[name='replacement']:checked").value === "with";
     const count = Number(elements.sentenceCount.value);
@@ -116,6 +125,7 @@ export function createGeneratorScreen({ getModel }) {
 
   return {
     generate,
+    reset,
     get lastResults() {
       return lastResults;
     },
