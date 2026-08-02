@@ -78,6 +78,10 @@ function createModel(cards, source, removedWords, baseCards) {
     words.filter((word) => !removedWords.has(word))
   );
   const activeWords = activeSentenceWords.flat();
+  const cardWords = new Set(
+    cards.flatMap(({ red, blue }) => [red, blue]).filter((word) => word !== BOUNDARY)
+  );
+  const previewWords = activeWords.filter((word) => cardWords.has(word));
   const activeSentenceLengths = activeSentenceWords.map((words) => words.length).filter(Boolean);
   const vocabulary = new Set(activeWords);
   const nextWordCounts = [...transitions.values()].map(
@@ -128,8 +132,8 @@ function createModel(cards, source, removedWords, baseCards) {
       topPairs: sortedPairs
         .filter(({ red, blue }) => red !== BOUNDARY && blue !== BOUNDARY)
         .slice(0, 10),
-      firstTokens: activeWords.slice(0, 18),
-      lastTokens: activeWords.slice(-18),
+      firstTokens: previewWords.slice(0, 18),
+      lastTokens: previewWords.slice(-18),
     },
   };
 }
