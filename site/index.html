@@ -137,8 +137,8 @@
         <div class="section-heading light-heading">
           <p class="step-kicker"><span>02</span> Follow the chain</p>
           <div>
-            <h2 id="generator-title">Generate a new sentence</h2>
-            <p>Start at X, draw a card, then find the pile that matches its blue word.</p>
+            <h2 id="generator-title">Generate new sentences</h2>
+            <p>Run several paths at once, then open any sentence to inspect the cards it used.</p>
           </div>
         </div>
 
@@ -148,8 +148,9 @@
               <span>model output</span>
               <span id="source-name">Example text</span>
             </div>
-            <blockquote id="generated-text">Press the button to follow a new path through the cards.</blockquote>
-            <div class="chain-trail" id="chain-trail" aria-label="Cards used in this sentence"></div>
+            <ol class="generated-list" id="generated-list" aria-live="polite">
+              <li class="generated-placeholder">Press the button to follow several new paths through the cards.</li>
+            </ol>
             <p class="generation-note" id="generation-note">The same training text can lead to many different paths.</p>
           </div>
 
@@ -170,7 +171,12 @@
               <strong><span id="max-words-value">32</span> words</strong>
             </label>
             <input id="max-words" type="range" min="8" max="60" value="32" step="1">
-            <button class="button button-paper" type="submit">Make a sentence <span aria-hidden="true">↻</span></button>
+            <label class="range-label" for="sentence-count">
+              <span>Sentences at a time</span>
+              <strong><span id="sentence-count-value">5</span> sentences</strong>
+            </label>
+            <input id="sentence-count" type="range" min="1" max="12" value="5" step="1">
+            <button class="button button-paper" id="generation-submit" type="submit">Generate 5 sentences <span aria-hidden="true">↻</span></button>
           </form>
         </div>
       </section>
@@ -183,6 +189,41 @@
             <p>Every occurrence becomes a card. A number shows when the same pair appears more than once.</p>
           </div>
         </div>
+
+        <section class="model-report" aria-labelledby="report-title">
+          <div class="report-heading">
+            <div>
+              <p class="eyebrow">Import report</p>
+              <h3 id="report-title">Model snapshot</h3>
+            </div>
+            <p class="boundary-check" id="boundary-check"></p>
+          </div>
+
+          <dl class="diagnostic-stats">
+            <div><dt>normalized characters</dt><dd id="diag-characters">0</dd></div>
+            <div><dt>unique words</dt><dd id="diag-vocabulary">0</dd></div>
+            <div><dt>sentence length</dt><dd id="diag-average-sentence">0 avg / 0 max</dd></div>
+            <div><dt>repeated cards</dt><dd id="diag-duplicates">0%</dd></div>
+            <div><dt>red-word piles</dt><dd id="diag-piles">0</dd></div>
+            <div><dt>branching piles</dt><dd id="diag-branching">0</dd></div>
+          </dl>
+
+          <div class="diagnostic-details">
+            <div class="diagnostic-panel">
+              <h4>Most frequent bigrams</h4>
+              <ol class="top-pairs" id="top-pairs"></ol>
+            </div>
+            <div class="diagnostic-panel">
+              <h4>Normalized token preview</h4>
+              <p class="diagnostic-caption">This is what the model actually read after lowercasing and punctuation removal.</p>
+              <div class="token-preview">
+                <div><span>First tokens</span><p id="first-tokens"></p></div>
+                <div><span>Last tokens</span><p id="last-tokens"></p></div>
+              </div>
+            </div>
+          </div>
+          <p class="report-footnote">Counts reflect the normalized tokens shown above. X is included as a red-word pile and as the sentence boundary card.</p>
+        </section>
 
         <div class="deck-tools">
           <label for="card-search">Find a red word</label>
@@ -238,4 +279,3 @@
     <script type="module" src="app.js"></script>
   </body>
 </html>
-

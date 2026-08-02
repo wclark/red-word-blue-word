@@ -5,8 +5,9 @@ A small, static classroom language lab. It turns source text into bigram
 following each blue word to the matching red-word pile.
 
 The app is deliberately transparent: students can inspect the cards, compare
-sampling with and without replacement, and see exactly which cards produced a
-sentence. It is a bigram/Markov model, not a neural language model.
+sampling with and without replacement, generate several sentences at once, see
+exactly which cards produced each sentence, and inspect import/model diagnostics.
+It is a bigram/Markov model, not a neural language model.
 
 ## What it can read
 
@@ -61,4 +62,3 @@ UUID key, then invalidates only those CloudFront paths. The clean production URL
 is:
 
 <https://xoom.org/b5a6e4a9-50cf-4a80-a666-a5666d13c913>
-

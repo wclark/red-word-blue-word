@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { BOUNDARY, buildModel, generateSentence, groupCards, tokenize } from "../site/model.js";
+import {
+  BOUNDARY,
+  buildModel,
+  generateSentence,
+  generateSentences,
+  groupCards,
+  tokenize,
+} from "../site/model.js";
 
 test("tokenize keeps contractions and hyphenated words", () => {
   assert.deepEqual(tokenize("Don't re-read BLUE words!"), ["don't", "re-read", "blue", "words"]);
@@ -24,6 +31,24 @@ test("duplicate source pairs remain duplicate weighted cards", () => {
   const goPile = groupCards(model).find(({ red }) => red === "go");
   assert.equal(goPile.total, 2);
   assert.deepEqual(goPile.blueWords, [{ blue: "now", count: 2 }]);
+  assert.equal(model.diagnostics.duplicateCardCount, 3);
+  assert.equal(model.diagnostics.startCardCount, 2);
+  assert.equal(model.diagnostics.endCardCount, 2);
+  assert.deepEqual(model.diagnostics.firstTokens, ["go", "now", "go", "now"]);
+});
+
+test("model diagnostics summarize branching and sentence lengths", () => {
+  const model = buildModel("Red birds sing. Red birds fly high.");
+  assert.equal(model.stats.vocabularyCount, 5);
+  assert.equal(model.diagnostics.averageSentenceLength, 3.5);
+  assert.equal(model.diagnostics.longestSentenceLength, 4);
+  assert.equal(model.diagnostics.redPileCount, 6);
+  assert.equal(model.diagnostics.branchingPileCount, 1);
+  assert.equal(model.diagnostics.widestPileNextWordCount, 2);
+  assert.deepEqual(
+    model.diagnostics.topPairs.find(({ red, blue }) => red === "X" && blue === "red"),
+    { red: "X", blue: "red", count: 2 }
+  );
 });
 
 test("generation follows a deterministic complete chain", () => {
@@ -51,4 +76,14 @@ test("generation respects its word limit", () => {
   assert.equal(result.completed, false);
   assert.equal(result.reason, "maximum");
   assert.match(result.text, /…$/u);
+});
+
+test("generateSentences returns the requested number of independent paths", () => {
+  const model = buildModel("Bright birds sing.");
+  const results = generateSentences(model, 5, { withReplacement: false, random: () => 0 });
+  assert.equal(results.length, 5);
+  results.forEach((result) => {
+    assert.equal(result.text, "Bright birds sing.");
+    assert.equal(new Set(result.cards.map(({ id }) => id)).size, result.cards.length);
+  });
 });
