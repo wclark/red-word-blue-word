@@ -7,12 +7,15 @@ following each blue word to the matching red-word pile.
 The app is deliberately transparent: students can inspect the cards, compare
 sampling with and without replacement, generate several sentences at once, see
 exactly which cards produced each sentence, and inspect import/model diagnostics.
-Red-word piles can be sorted, searched, paged, expanded, or clicked to remove
-that word from both sides of every card. Deterministic runs are collapsed into
-multi-token blue paths; longer runs can be removed from the source token stream
-before the bigrams are rebuilt, without globally deleting their individual
-words. All removals can be restored without re-importing the source. It is a
-bigram/Markov model, not a neural language model.
+The default deck collapses deterministic paths into a smaller set of virtual
+cards. Each has exactly one red word; its blue side can contain several words,
+but only the final word is blue because that is the word that points to the next
+card. An alternate view exposes every underlying bigram pile. Both views can be
+sorted, searched, and paged, and red words can be clicked to remove that word
+from both sides of every card. Longer fixed runs can be removed from the source
+token stream before the bigrams are rebuilt, without globally deleting their
+individual words. All removals can be restored without re-importing the source.
+It is a bigram/Markov model, not a neural language model.
 
 The default workflow moves through Source, Model, Generate, and Learn screens,
 so imported text is inspected before generation. Cleaned models can be downloaded

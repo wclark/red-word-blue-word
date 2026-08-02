@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   BOUNDARY,
   buildModel,
+  collapseCards,
   createModelSnapshot,
   filterModel,
   generateSentence,
@@ -128,12 +129,58 @@ test("groupCards can sort piles by frequency and branching", () => {
   assert.equal(byBranching[1].blueWords.length, 3);
 });
 
-test("groupCards collapses a deterministic run up to its first branching word", () => {
+test("collapseCards removes deterministic intermediate piles", () => {
   const model = buildModel("Start one fork left. Start one fork right.");
-  const startPile = groupCards(model).find(({ red }) => red === "start");
+  const cards = collapseCards(model);
 
-  assert.deepEqual(startPile.blueWords, [{ blue: "one", count: 2 }]);
-  assert.deepEqual(startPile.deterministicPath, ["one", "fork"]);
+  assert.equal(groupCards(model).length, 6);
+  assert.equal(cards.length, 3);
+  assert.deepEqual(cards[0], {
+    red: BOUNDARY,
+    bluePath: ["start", "one", "fork"],
+    finalBlue: "fork",
+    count: 2,
+    total: 2,
+    choiceCount: 1,
+    sourceSequence: ["start", "one", "fork"],
+  });
+  assert.deepEqual(
+    cards.filter(({ red }) => red === "fork").map(({ bluePath }) => bluePath),
+    [["left", BOUNDARY], ["right", BOUNDARY]]
+  );
+  assert.ok(cards.every(({ red }) => !["start", "one", "left", "right"].includes(red)));
+});
+
+test("collapseCards keeps one stable anchor for a deterministic cycle", () => {
+  const model = {
+    transitions: new Map([
+      ["beta", [{ red: "beta", blue: "alpha" }]],
+      ["alpha", [{ red: "alpha", blue: "beta" }]],
+    ]),
+  };
+
+  assert.deepEqual(collapseCards(model), [{
+    red: "alpha",
+    bluePath: ["beta", "alpha"],
+    finalBlue: "alpha",
+    count: 1,
+    total: 1,
+    choiceCount: 1,
+    sourceSequence: ["alpha", "beta", "alpha"],
+  }]);
+});
+
+test("collapsed virtual cards can be sorted by path frequency", () => {
+  const model = buildModel("Start fork right. Start fork right. Start fork left.");
+  const alphabetical = collapseCards(model).filter(({ red }) => red === "fork");
+  const frequent = collapseCards(model, { sortBy: "frequency-desc" })
+    .filter(({ red }) => red === "fork");
+
+  assert.deepEqual(alphabetical.map(({ bluePath }) => bluePath), [["left", BOUNDARY], ["right", BOUNDARY]]);
+  assert.deepEqual(frequent.map(({ bluePath, count }) => [bluePath, count]), [
+    [["right", BOUNDARY], 2],
+    [["left", BOUNDARY], 1],
+  ]);
 });
 
 test("sequence pruning happens before bigrams while preserving the same words elsewhere", () => {
